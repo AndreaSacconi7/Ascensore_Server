@@ -3,10 +3,7 @@ package polimi.ascensore;
 import lombok.Getter;
 import com.google.gson.Gson;
 
-import java.io.FileNotFoundException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
+import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.Stack;
@@ -18,6 +15,7 @@ public class Deck {
 
     transient Gson gson = new Gson();
 
+    //Array di carte in formato JSON che verrà utilizzato per la creazione del mazzo
     private Card[] cardJson;
 
     public Deck() {
@@ -25,7 +23,7 @@ public class Deck {
         this.cardJson = new Card[40];
     }
 
-    public Stack<Card> createCardDeck() throws FileNotFoundException, InstantiationException, IllegalAccessException, ClassNotFoundException {
+    public void createCardDeck() throws FileNotFoundException, InstantiationException, IllegalAccessException, ClassNotFoundException {
         InputStream is = getClass().getResourceAsStream("/CardsFiles/ResourceCardFile.json");
         if (is == null) {
             throw new FileNotFoundException("Il file 'CardFile.json' non è stato trovato");
@@ -33,12 +31,17 @@ public class Deck {
         Reader reader = new InputStreamReader(is, StandardCharsets.UTF_8);
         cardJson = gson.fromJson(reader, Card[].class);
 
-        for (int i = 0; i < cardJson.length; i++){
-            deckcards.push(cardJson[i]);
-            Collections.shuffle(deckcards);
+        for (Card card : cardJson) {
+            deckcards.push(card);
         }
 
-        return deckcards;
+        Collections.shuffle(deckcards);
+    }
+
+    //metodo chiamato quando si effettua la lettura con stream
+    private void readObject(ObjectInputStream ois) throws IOException, ClassNotFoundException {
+        ois.defaultReadObject();
+        gson = new Gson();
     }
 
 }

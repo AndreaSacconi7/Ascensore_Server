@@ -1,7 +1,10 @@
 package polimi.ascensore;
 
 import lombok.Getter;
+import org.hibernate.mapping.Table;
+import polimi.ascensore.exception.PlayerNickNameDoesNotExist;
 
+import java.io.FileNotFoundException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -19,24 +22,22 @@ public class Game {
     @Getter
     private Deck deck;
     @Getter
-    private HashMap<Card, Player> table;
-    @Getter
-    private Player winnerPlayer;
-    @Getter
-    private Seed briscola;
+    private TableCard tableCard;
 
     public Game() {
         this.players = new ArrayList<>();
         this.round = 0;
         this.numTurn = 0;
         this.deck = new Deck();
-        this.table = new HashMap<>();
-        winnerPlayer = null;
-
+        this.tableCard = new TableCard();
     }
 
-    public void addPlayer(String name) {
-        Player player = new Player(name);
+    public void startGame() throws FileNotFoundException, ClassNotFoundException, InstantiationException, IllegalAccessException {
+        deck.createCardDeck();
+    }
+
+    public void addPlayer(String nickName) {
+        Player player = new Player(nickName);
         players.add(player);
     }
 
@@ -48,17 +49,17 @@ public class Game {
         this.numTurn++;
     }
 
-    public void updateTable(Card card) {
-        //inserire logica per capire se è una winnerCard
-        table.put(card, players.get(numTurn));
+    public void resetNumTurn(){
+        this.numTurn = 0;
     }
 
-    public void updateWinnerPlayer(Player player) {
-        winnerPlayer = player;
-    }
-
-    public void updateBriscola(Seed briscola) {
-        this.briscola = briscola;
+    public Player getPlayerByNickName(String nickname) throws PlayerNickNameDoesNotExist {
+        for(Player p : players) {
+            if(p.getNickName().equals(nickname)) {
+                return p;
+            }
+        }
+        throw new PlayerNickNameDoesNotExist();
     }
 
 }

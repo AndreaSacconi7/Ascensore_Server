@@ -6,4 +6,5 @@ public enum Seed {
     SWORDS,
     COINS,
     CUPS;
+
 }

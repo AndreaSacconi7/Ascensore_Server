@@ -14,4 +14,8 @@ public class Hand {
     public void addCards(Card[] cards) {
         this.cards = cards;
     }
+
+    public Card getCardByHand(int index) {
+        return cards[index];
+    }
 }

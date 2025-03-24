@@ -1,8 +1,9 @@
 package polimi.ascensore;
 
-public enum State {
+public enum PlayerState {
 
     IDLE,
     WAIT,
-    ACTIVE;
+    BET,
+    PLAY;
 }
