@@ -9,12 +9,22 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
+//NOTE:
+//una partita è composta da 19 set e ogni set è composto da N round. All'interno di un round ci sono 8 turni
+//SET: partita che si conclude quando i giocatori hanno giocato tutte le carte in mano
+//ROUND = round che si conclude quando tutti i giocatori hanno giocato una carta
+//NUMTURN = turno di gioco, si conclude quando un giocatore ha giocato una carta o scomesso
+//Il gioco si conclude quando si sono eseguiti 19 round
+
 public class Game {
 
+    private final int NUM_PLAYER = 4;
     @Getter
     List<Player> players;
     //Round indica la partita (per gestire carte e scommesse)
     //numTurn indica il turno di gioco (per gestire le azioni dei giocatori)
+    @Getter
+    private int set;
     @Getter
     private int round;
     @Getter
@@ -26,7 +36,7 @@ public class Game {
 
     public Game() {
         this.players = new ArrayList<>();
-        this.round = 0;
+        this.round = 1;
         this.numTurn = 0;
         this.deck = new Deck();
         this.tableCard = new TableCard();
@@ -36,13 +46,36 @@ public class Game {
         deck.createCardDeck();
     }
 
+    public void distributeCards() {
+        for(Player p : players) {
+            for(int i = 0; i < NUM_PLAYER; i++) {
+                //aggiungp #set carte per ogni giocatore
+                for(int j = 0; j < set; j++)
+                    p.addCardToHand(deck.getDeckcards().pop());
+            }
+        }
+        //aggiungo la briscola tranne nel set 10
+        if(!deck.getDeckcards().isEmpty())
+            tableCard.setBriscola(deck.getDeckcards().pop());
+        else
+            tableCard.setBriscola(null);
+    }
+
     public void addPlayer(String nickName) {
         Player player = new Player(nickName);
         players.add(player);
     }
 
+    public void updateSet() {
+        this.set++;
+    }
+
     public void updateRound() {
         this.round++;
+    }
+
+    public void resetRound(){
+        this.round = 0;
     }
 
     public void updateNumTurn() {

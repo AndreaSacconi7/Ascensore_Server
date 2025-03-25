@@ -15,12 +15,12 @@ public class Deck {
 
     transient Gson gson = new Gson();
 
-    //Array di carte in formato JSON che verrà utilizzato per la creazione del mazzo
-    private Card[] cardJson;
+    //stack di carte che non viene modificato ma viene usato per ripristinare il mazzo
+    private Stack<Card> cardStack;
 
     public Deck() {
         this.deckcards = new Stack<>();
-        this.cardJson = new Card[40];
+        this.cardStack = new Stack<>();
     }
 
     public void createCardDeck() throws FileNotFoundException, InstantiationException, IllegalAccessException, ClassNotFoundException {
@@ -29,12 +29,19 @@ public class Deck {
             throw new FileNotFoundException("Il file 'CardFile.json' non è stato trovato");
         }
         Reader reader = new InputStreamReader(is, StandardCharsets.UTF_8);
-        cardJson = gson.fromJson(reader, Card[].class);
+        Card[] cardJson = gson.fromJson(reader, Card[].class);
 
         for (Card card : cardJson) {
             deckcards.push(card);
+            cardStack.push(card);
         }
 
+        Collections.shuffle(deckcards);
+    }
+
+    public void shuffleDeck(){
+        deckcards.clear();
+        deckcards.addAll(cardStack);
         Collections.shuffle(deckcards);
     }
 

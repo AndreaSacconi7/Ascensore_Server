@@ -1,6 +1,10 @@
 package polimi.ascensore;
 
 import lombok.Getter;
+import lombok.Setter;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class Player {
 
@@ -11,9 +15,10 @@ public class Player {
     @Getter
     private int bet;
     @Getter
-    private int turnsWon;
+    private int roundsWon;
     @Getter
-    private Hand hand;
+    @Setter
+    private List<Card> hand;
     @Getter
     private PlayerState playerState;
 
@@ -22,21 +27,21 @@ public class Player {
         this.nickName = nickName;
         this.score = 0;
         this.bet = 0;
-        this.hand = new Hand();
+        this.hand = new ArrayList<>();
         this.playerState = PlayerState.IDLE;
     }
 
     public void updateScore() {
-        if(turnsWon == bet){
+        if(roundsWon == bet){
             score = score + (10 * bet) + 10;
         } else {
-            int diff = Math.abs(turnsWon - bet);
+            int diff = Math.abs(roundsWon - bet);
             score = score - (diff * 10);
         }
     }
 
-    public void updateTurnsWon(){
-        this.turnsWon++;
+    public void updateRoundsWon(){
+        this.roundsWon++;
     }
 
     public void updateBet(int newBet) {
@@ -47,8 +52,16 @@ public class Player {
         this.playerState = playerState;
     }
 
-    public void resetTurnsWon(){
-        this.turnsWon = 0;
+    public void removeCardFromHand(int index){
+        hand.remove(index);
+    }
+
+    public void addCardToHand(Card card){
+        hand.add(card);
+    }
+
+    public void resetRoundsWon(){
+        this.roundsWon = 0;
     }
 
     public void resetBet(){
