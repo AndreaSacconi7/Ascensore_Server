@@ -35,8 +35,9 @@ public class Controller {
         }
     }
 
-    public void addPlayer(String name) {
-        game.addPlayer(name);
+    public void addPlayer(String nickName) {
+        //TODO: controllare se il player è già presente
+        game.addPlayer(nickName);
     }
 
     public void putCard(int indexHand, String nickName) {

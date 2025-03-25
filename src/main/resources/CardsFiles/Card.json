@@ -6,5 +6,113 @@
   {
     "value": 2,
     "seed": "coins"
+  },
+  {
+    "value": 3,
+    "seed": "coins"
+  },
+  {
+    "value": 4,
+    "seed": "coins"
+  },
+  {
+    "value": 5,
+    "seed": "coins"
+  },
+  {
+    "value": 6,
+    "seed": "coins"
+  },
+  {
+    "value": 7,
+    "seed": "coins"
+  },
+  {
+    "value": 8,
+    "seed": "coins"
+  },
+  {
+    "value": 9,
+    "seed": "coins"
+  },
+  {
+    "value": 10,
+    "seed": "coins"
+  },
+  {
+    "value": 1,
+    "seed": "cups"
+  },
+  {
+    "value": 2,
+    "seed": "cups"
+  },
+  {
+    "value": 3,
+    "seed": "cups"
+  },
+  {
+    "value": 4,
+    "seed": "cups"
+  },
+  {
+    "value": 5,
+    "seed": "cups"
+  },
+  {
+    "value": 6,
+    "seed": "cups"
+  },
+  {
+    "value": 7,
+    "seed": "cups"
+  },
+  {
+    "value": 8,
+    "seed": "cups"
+  },
+  {
+    "value": 9,
+    "seed": "cups"
+  },
+  {
+    "value": 10,
+    "seed": "cups"
+  },
+  {
+    "value": 2,
+    "seed": "swords"
+  },
+  {
+    "value": 3,
+    "seed": "swords"
+  },
+  {
+    "value": 4,
+    "seed": "swords"
+  },
+  {
+    "value": 5,
+    "seed": "swords"
+  },
+  {
+    "value": 6,
+    "seed": "swords"
+  },
+  {
+    "value": 7,
+    "seed": "swords"
+  },
+  {
+    "value": 8,
+    "seed": "swords"
+  },
+  {
+    "value": 9,
+    "seed": "swords"
+  },
+  {
+    "value": 10,
+    "seed": "swords"
   }
 ]
