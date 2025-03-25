@@ -3,6 +3,7 @@ package polimi.ascensore;
 import lombok.Getter;
 import lombok.Setter;
 
+
 public class Card {
 
     @Getter

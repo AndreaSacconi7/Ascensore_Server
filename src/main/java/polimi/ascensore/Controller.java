@@ -1,21 +1,35 @@
 package polimi.ascensore;
 
+import org.springframework.stereotype.Service;
 import polimi.ascensore.exception.PlayerNickNameDoesNotExist;
+import polimi.ascensore.network.ClientMessage;
+import polimi.ascensore.network.WebSocketHandler;
 
 import java.io.FileNotFoundException;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Queue;
 
+@Service
 public class Controller {
 
     private final int NUM_PLAYERS = 4;
 
     private final Game game;
 
+    private final WebSocketHandler webSocketHandler;
+
     public Controller() {
 
         game = new Game();
+        webSocketHandler = new WebSocketHandler();
+    }
+
+    public void notifyClients(String nickName, Object messageContent) {
+
+        ClientMessage message = new ClientMessage("updateHand", messageContent);
+        webSocketHandler.sendMessageToAll(message);
     }
 
     public void startGame() {
