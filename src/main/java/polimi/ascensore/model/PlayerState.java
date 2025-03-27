@@ -1,4 +1,4 @@
-package polimi.ascensore;
+package polimi.ascensore.model;
 
 public enum PlayerState {
 

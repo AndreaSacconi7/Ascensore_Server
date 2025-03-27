@@ -1,25 +1,20 @@
-package polimi.ascensore;
-
-import lombok.Getter;
-import lombok.Setter;
+package polimi.ascensore.model;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class Player {
 
-    @Getter
     private final String nickName;
-    @Getter
+
     private int score;
-    @Getter
+
     private int bet;
-    @Getter
+
     private int roundsWon;
-    @Getter
-    @Setter
+
     private List<Card> hand;
-    @Getter
+
     private PlayerState playerState;
 
 
@@ -66,5 +61,33 @@ public class Player {
 
     public void resetBet(){
         this.bet = 0;
+    }
+
+    public String getNickName() {
+        return nickName;
+    }
+
+    public int getScore() {
+        return score;
+    }
+
+    public int getBet() {
+        return bet;
+    }
+
+    public int getRoundsWon() {
+        return roundsWon;
+    }
+
+    public List<Card> getHand() {
+        return hand;
+    }
+
+    public void setHand(List<Card> hand) {
+        this.hand = hand;
+    }
+
+    public PlayerState getPlayerState() {
+        return playerState;
     }
 }

@@ -1,0 +1,42 @@
+package polimi.ascensore.network.message;
+
+import java.io.Serializable;
+
+public class Message implements Serializable {
+
+    private ExecutableInClient executable;
+
+    //nickname del player che è di turno
+    /**
+     * Represents the nickname of the player that is playing.
+     */
+    private String nickName;
+    //tale costruttore pone i messaggi direttamente a tipo COMMON_MESSAGE
+
+    /**
+     * Creates a message with the specified executable and nickname.
+     * Sets messages directly to type COMMON_MESSAGE
+     * @param executable the executable with the response to the client
+     * @param nickName the player who receives the message
+     */
+    public Message(ExecutableInClient executable, String nickName){
+        this.executable = executable;
+        this.nickName = nickName;
+        //this.type = MessageType.COMMON_MESSAGE;
+    }
+
+    /**
+     * @return the executable of the message
+     */
+    public ExecutableInClient getExecutable(){
+        return this.executable;
+    }
+
+    /**
+     * @return the nickname of the player that is playing
+     */
+    public String getNickName(){
+        return this.nickName;
+    }
+
+}

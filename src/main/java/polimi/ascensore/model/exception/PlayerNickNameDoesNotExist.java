@@ -1,4 +1,4 @@
-package polimi.ascensore.exception;
+package polimi.ascensore.model.exception;
 
 public class PlayerNickNameDoesNotExist extends Exception {
 }

@@ -1,15 +1,19 @@
-package polimi.ascensore;
+package polimi.ascensore.controller;
 
 import org.springframework.stereotype.Service;
-import polimi.ascensore.exception.PlayerNickNameDoesNotExist;
-import polimi.ascensore.network.ClientMessage;
-import polimi.ascensore.network.WebSocketHandler;
+import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
+import polimi.ascensore.model.Card;
+import polimi.ascensore.model.Game;
+import polimi.ascensore.model.Player;
+import polimi.ascensore.model.PlayerState;
+import polimi.ascensore.network.message.ExecutableInClient;
+import polimi.ascensore.network.message.LoginResponse;
+import polimi.ascensore.network.message.Message;
+import polimi.ascensore.network.server.SocketClientHandler;
 
 import java.io.FileNotFoundException;
-import java.util.HashMap;
+import java.util.ArrayList;
 import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
 
 @Service
 public class Controller {
@@ -18,18 +22,24 @@ public class Controller {
 
     private final Game game;
 
-    private final WebSocketHandler webSocketHandler;
+    private final ArrayList<SocketClientHandler> gameNotifications;
 
     public Controller() {
 
         game = new Game();
-        webSocketHandler = new WebSocketHandler();
+        this.gameNotifications = new ArrayList<>();
     }
 
-    public void notifyClients(String nickName, Object messageContent) {
+    public void notifyClients(ExecutableInClient executable, String nickName) {
 
-        ClientMessage message = new ClientMessage("updateHand", messageContent);
-        webSocketHandler.sendMessageToAll(message);
+        Message message = new Message(executable, nickName);
+        synchronized (gameNotifications) {
+            for(SocketClientHandler clientHandler : gameNotifications) {
+                //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
+
+                clientHandler.forwardUpdate(message);
+            }
+        }
     }
 
     public void startGame() {
@@ -52,7 +62,15 @@ public class Controller {
     public void addPlayer(String nickName) {
         //TODO: controllare se il player è già presente
         game.addPlayer(nickName);
+
+        LinkedList<String> connectedPlayers = new LinkedList<>();
+        for(Player p: game.getPlayers()){
+            connectedPlayers.add(p.getNickName());
+        }
+        LoginResponse loginResponse = new LoginResponse(true, nickName, connectedPlayers);
+        notifyClients(loginResponse, nickName);
     }
+
 
     public void putCard(int indexHand, String nickName) {
 
@@ -243,6 +261,12 @@ public class Controller {
         for(Player p : game.getPlayers()) {
             p.resetBet();
             p.resetRoundsWon();
+        }
+    }
+
+    public void addClientHandler(SocketClientHandler clientHandler) {
+        synchronized (gameNotifications) {
+            gameNotifications.add(clientHandler);
         }
     }
 }

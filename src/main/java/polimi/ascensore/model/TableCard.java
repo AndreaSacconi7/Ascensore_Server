@@ -1,22 +1,17 @@
-package polimi.ascensore;
-
-import lombok.Getter;
-import lombok.Setter;
+package polimi.ascensore.model;
 
 import java.util.*;
 
 public class TableCard {
 
-    @Getter
+
     private LinkedList<Card> playedCards;
-    @Getter
+
     private Player winnerPlayer;
-    @Getter
-    @Setter
+
     private Card briscola;
     //lista che determina l'ordine di gioco dei player
-    @Setter
-    @Getter
+
     private List<Player> playerListOrder;
 
     public TableCard() {
@@ -62,6 +57,30 @@ public class TableCard {
 
     public void resetPlayedCard(){
         playedCards.clear();
+    }
+
+    public LinkedList<Card> getPlayedCards() {
+        return playedCards;
+    }
+
+    public Player getWinnerPlayer() {
+        return winnerPlayer;
+    }
+
+    public Card getBriscola() {
+        return briscola;
+    }
+
+    public void setBriscola(Card briscola) {
+        this.briscola = briscola;
+    }
+
+    public List<Player> getPlayerListOrder() {
+        return playerListOrder;
+    }
+
+    public void setPlayerListOrder(List<Player> playerListOrder) {
+        this.playerListOrder = playerListOrder;
     }
 
 }

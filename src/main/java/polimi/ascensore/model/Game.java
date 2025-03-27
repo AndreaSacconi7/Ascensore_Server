@@ -1,12 +1,9 @@
-package polimi.ascensore;
+package polimi.ascensore.model;
 
-import lombok.Getter;
-import org.hibernate.mapping.Table;
-import polimi.ascensore.exception.PlayerNickNameDoesNotExist;
+import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
 
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 
 //NOTE:
@@ -19,19 +16,19 @@ import java.util.List;
 public class Game {
 
     private final int NUM_PLAYER = 4;
-    @Getter
+
     List<Player> players;
     //Round indica la partita (per gestire carte e scommesse)
     //numTurn indica il turno di gioco (per gestire le azioni dei giocatori)
-    @Getter
+
     private int set;
-    @Getter
+
     private int round;
-    @Getter
+
     private int numTurn;
-    @Getter
+
     private Deck deck;
-    @Getter
+
     private TableCard tableCard;
 
     public Game() {
@@ -93,6 +90,30 @@ public class Game {
             }
         }
         throw new PlayerNickNameDoesNotExist();
+    }
+
+    public int getSet() {
+        return set;
+    }
+
+    public int getRound() {
+        return round;
+    }
+
+    public int getNumTurn() {
+        return numTurn;
+    }
+
+    public Deck getDeck() {
+        return deck;
+    }
+
+    public TableCard getTableCard() {
+        return tableCard;
+    }
+
+    public List<Player> getPlayers() {
+        return players;
     }
 
 }

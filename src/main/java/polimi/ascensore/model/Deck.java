@@ -1,6 +1,5 @@
-package polimi.ascensore;
+package polimi.ascensore.model;
 
-import lombok.Getter;
 import com.google.gson.Gson;
 
 import java.io.*;
@@ -10,7 +9,6 @@ import java.util.Stack;
 
 public class Deck {
 
-    @Getter
     private Stack<Card> deckcards;
 
     transient Gson gson = new Gson();
@@ -51,4 +49,7 @@ public class Deck {
         gson = new Gson();
     }
 
+    public Stack<Card> getDeckcards() {
+        return cardStack;
+    }
 }

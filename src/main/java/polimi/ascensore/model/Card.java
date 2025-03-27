@@ -1,18 +1,22 @@
-package polimi.ascensore;
-
-import lombok.Getter;
-import lombok.Setter;
+package polimi.ascensore.model;
 
 
 public class Card {
 
-    @Getter
     private final Seed seed;
-    @Getter
+
     private final int value;
 
     public Card(Seed seed, int value) {
         this.seed = seed;
         this.value = value;
+    }
+
+    public Seed getSeed() {
+        return seed;
+    }
+
+    public int getValue() {
+        return value;
     }
 }
