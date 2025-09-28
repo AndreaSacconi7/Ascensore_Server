@@ -21,13 +21,13 @@ public class CommandDeserializer implements JsonDeserializer<Command> {
         ExecutableInServer executable = null;
         if ("LOGIN_COMMAND".equals(commandType)) {
             executable = context.deserialize(jsonObject.get("executable"), ConnectionRequest.class);
-        }else if("PING_COMMAND".equals(commandType)) {
+        /*}else if("PING_COMMAND".equals(commandType)) {
             //executable = context.deserialize(jsonObject.get("executable"), PingCommand.class);
         } else if ("PUT_CARD".equals(commandType)) {
             //executable = context.deserialize(jsonObject.get("executable"), PutCardCommand.class);
         } else if ("SET_BET".equals(commandType)) {
             //executable = context.deserialize(jsonObject.get("executable"), SetBetCommand.class);
-        } else{
+        */} else{
             //comando sconosciuto
             throw new JsonParseException("Unknown command type: " + commandType);
         }
