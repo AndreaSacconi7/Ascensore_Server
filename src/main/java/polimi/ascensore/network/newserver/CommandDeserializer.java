@@ -19,12 +19,19 @@ public class CommandDeserializer implements JsonDeserializer<Command> {
 
         // Deserializza l'eseguibile in base al tipo
         ExecutableInServer executable = null;
-        if ("CONNECTION_COMMAND".equals(commandType)) {
+        if ("LOGIN_COMMAND".equals(commandType)) {
             executable = context.deserialize(jsonObject.get("executable"), ConnectionRequest.class);
-        }else{
+        }else if("PING_COMMAND".equals(commandType)) {
+            //executable = context.deserialize(jsonObject.get("executable"), PingCommand.class);
+        } else if ("PUT_CARD".equals(commandType)) {
+            //executable = context.deserialize(jsonObject.get("executable"), PutCardCommand.class);
+        } else if ("SET_BET".equals(commandType)) {
+            //executable = context.deserialize(jsonObject.get("executable"), SetBetCommand.class);
+        } else{
+            //comando sconosciuto
             throw new JsonParseException("Unknown command type: " + commandType);
         }
-        // Aggiungi altri tipi di comando qui, se necessario
+        // Aggiungi altri tipi di comando prima dell'exception, se necessario
 
         // Crea e restituisci il comando
         return new Command(executable, CommandType.valueOf(commandType));
