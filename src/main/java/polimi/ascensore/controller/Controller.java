@@ -9,10 +9,9 @@ import polimi.ascensore.model.PlayerState;
 import polimi.ascensore.network.message.ExecutableInClient;
 import polimi.ascensore.network.message.LoginResponse;
 import polimi.ascensore.network.message.Message;
-import polimi.ascensore.network.server.SocketClientHandler;
+import polimi.ascensore.network.newserver.MySocketHandler;
 
 import java.io.FileNotFoundException;
-import java.util.ArrayList;
 import java.util.LinkedList;
 
 @Service
@@ -22,23 +21,36 @@ public class Controller {
 
     private final Game game;
 
-    private final ArrayList<SocketClientHandler> gameNotifications;
+    private MySocketHandler gameNotifications;
 
     public Controller() {
 
         game = new Game();
-        this.gameNotifications = new ArrayList<>();
+        this.gameNotifications = null;
     }
 
-    public void notifyClients(ExecutableInClient executable, String nickName) {
+    public void setSocketHandler(MySocketHandler mySocketHandler) {
 
-        Message message = new Message(executable, nickName);
+        this.gameNotifications = mySocketHandler;
+    }
+
+    public void notifyAllClients(ExecutableInClient executable, String clientsessionId) {
+
+        Message message = new Message(executable, clientsessionId);
         synchronized (gameNotifications) {
-            for(SocketClientHandler clientHandler : gameNotifications) {
-                //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
 
-                clientHandler.forwardUpdate(message);
-            }
+            //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
+            gameNotifications.forwardUpdateToAll(message, clientsessionId);
+        }
+    }
+
+    public void notifySingleClient(ExecutableInClient executable, String clientSessionId) {
+
+        Message message = new Message(executable, clientSessionId);
+        synchronized (gameNotifications) {
+
+            //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
+            gameNotifications.forwardUpdateToSingleClient(message, clientSessionId);
         }
     }
 
@@ -68,7 +80,7 @@ public class Controller {
             connectedPlayers.add(p.getNickName());
         }
         LoginResponse loginResponse = new LoginResponse(true, nickName, connectedPlayers);
-        notifyClients(loginResponse, nickName);
+        notifyAllClients(loginResponse, nickName);
     }
 
 
@@ -264,9 +276,9 @@ public class Controller {
         }
     }
 
-    public void addClientHandler(SocketClientHandler clientHandler) {
+    /*public void addClientHandler(MySocketHandler clientHandler) {
         synchronized (gameNotifications) {
             gameNotifications.add(clientHandler);
         }
-    }
+    }*/
 }

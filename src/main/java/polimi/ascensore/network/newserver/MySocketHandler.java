@@ -8,19 +8,15 @@ import org.springframework.web.socket.WebSocketMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 import polimi.ascensore.network.command.Command;
-import polimi.ascensore.network.message.LoginResponse;
 import polimi.ascensore.network.message.Message;
 import polimi.ascensore.network.server.MasterServer;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 
 public class MySocketHandler extends TextWebSocketHandler {
 
-    List<WebSocketSession> sessions;
+    HashMap<String, WebSocketSession> sessions;
 
     MasterServer masterServer;
 
@@ -28,10 +24,11 @@ public class MySocketHandler extends TextWebSocketHandler {
 
     public MySocketHandler(MasterServer masterServer) {
         this.masterServer = masterServer;
-        this.sessions = new ArrayList<>();
+        this.sessions = new HashMap<>();
         gson = new GsonBuilder()
                 .registerTypeAdapter(Command.class, new CommandDeserializer())
                 .create();
+        masterServer.setSocketHandler(this);
     }
 
     @Override
@@ -41,6 +38,8 @@ public class MySocketHandler extends TextWebSocketHandler {
         //session.sendMessage(new TextMessage("Echo: " + payload));
         try {
             Command receivedCommand = gson.fromJson(payload, Command.class);
+            //imposto id della session (così so chi mi ha mandato il pacchetto e gli rispondo)
+            receivedCommand.setClientSessionId(session.getId());
             masterServer.addCommandToList(receivedCommand);
         } catch (Exception e) {
             System.err.println("Error parsing JSON: " + e.getMessage());
@@ -60,7 +59,7 @@ public class MySocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        sessions.add(session);
+        sessions.put(null, session);
         System.out.println("New connection established: " + session.getId());
     }
 
@@ -69,5 +68,39 @@ public class MySocketHandler extends TextWebSocketHandler {
         sessions.remove(session);
         System.out.println("Connection closed: " + session.getId());
     }
+
+    public void forwardUpdateToAll(Message message, String clientSessionId) {
+
+        WebSocketMessage<String> msg = new TextMessage(message.toJson());
+        System.out.println("Sending: " + msg.getPayload());
+        for(Map.Entry<String, WebSocketSession> entry : sessions.entrySet()) {
+            WebSocketSession session = entry.getValue();
+            try {
+                session.sendMessage(msg);
+            } catch (IOException e) {
+                System.err.println("Error sending message to client " + entry.getKey() + ": " + e.getMessage());
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public void forwardUpdateToSingleClient(Message message, String clientSessionId){
+
+        for(Map.Entry<String, WebSocketSession> entry : sessions.entrySet()) {
+            if(entry.getKey().equals(clientSessionId)){
+                WebSocketSession session = entry.getValue();
+                try {
+                    WebSocketMessage<String> msg = new TextMessage(message.toJson());
+                    System.out.println("Sending to " + clientSessionId + ": " + msg.getPayload());
+                    session.sendMessage(msg);
+                } catch (IOException e) {
+                    System.err.println("Error sending message to client " + clientSessionId + ": " + e.getMessage());
+                    e.printStackTrace();
+                }
+                break; // Exit the loop once the matching session is found
+            }
+        }
+    }
+
 
 }

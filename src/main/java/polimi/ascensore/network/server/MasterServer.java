@@ -4,6 +4,7 @@ import org.springframework.stereotype.Service;
 import polimi.ascensore.controller.Controller;
 import polimi.ascensore.network.command.Command;
 import polimi.ascensore.network.command.ExecutableInServer;
+import polimi.ascensore.network.newserver.MySocketHandler;
 
 import java.time.LocalTime;
 import java.util.LinkedList;
@@ -74,5 +75,9 @@ public class MasterServer {
 
         //controller.addClientHandler(clientHandler);
         controller.addPlayer(nickName);
+    }
+
+    public void setSocketHandler(MySocketHandler socketHandler) {
+        controller.setSocketHandler(socketHandler);
     }
 }

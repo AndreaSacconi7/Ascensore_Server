@@ -15,6 +15,8 @@ public class Command implements Serializable {
      */
     private ExecutableInServer executable;
 
+    private String clientSessionId;
+
     /**
      * Constructs a command with the specified executable and type.
      * @param executable the executable inside the command.
@@ -23,6 +25,7 @@ public class Command implements Serializable {
     public Command(ExecutableInServer executable, CommandType type){
         this.executable = executable;
         this.type = type;
+        this.clientSessionId = null;
     }
 
     /**
@@ -37,5 +40,9 @@ public class Command implements Serializable {
      */
     public CommandType getType(){
         return this.type;
+    }
+
+    public void setClientSessionId(String clientSessionId) {
+        this.clientSessionId = clientSessionId;
     }
 }
