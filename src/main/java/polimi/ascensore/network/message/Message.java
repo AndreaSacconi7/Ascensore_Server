@@ -1,5 +1,7 @@
 package polimi.ascensore.network.message;
 
+import com.google.gson.Gson;
+
 import java.io.Serializable;
 
 public class Message implements Serializable {
@@ -37,6 +39,12 @@ public class Message implements Serializable {
      */
     public String getNickName(){
         return this.nickName;
+    }
+
+    // Convert the object to JSON
+    public String toJson() {
+        Gson gson = new Gson();
+        return gson.toJson(this);
     }
 
 }

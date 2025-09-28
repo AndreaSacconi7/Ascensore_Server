@@ -1,6 +1,6 @@
 package polimi.ascensore.network.server;
 
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import polimi.ascensore.controller.Controller;
 import polimi.ascensore.network.command.Command;
 import polimi.ascensore.network.command.ExecutableInServer;
@@ -9,7 +9,7 @@ import java.time.LocalTime;
 import java.util.LinkedList;
 import java.util.Queue;
 
-@Component
+@Service
 public class MasterServer {
 
     private final Controller controller;
@@ -70,9 +70,9 @@ public class MasterServer {
         }
     }
 
-    public void addClientHandler(SocketClientHandler clientHandler, String nickName){
+    public void addClient(String nickName, String password){
 
-        controller.addClientHandler(clientHandler);
+        //controller.addClientHandler(clientHandler);
         controller.addPlayer(nickName);
     }
 }

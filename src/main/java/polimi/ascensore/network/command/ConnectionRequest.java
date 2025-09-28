@@ -4,23 +4,24 @@ import polimi.ascensore.network.server.MasterServer;
 
 import java.io.ObjectOutputStream;
 
-import polimi.ascensore.network.server.SocketClientHandler;
-
 public class ConnectionRequest implements ExecutableInServer{
 
-    private ObjectOutputStream output;
+    //private ObjectOutputStream output;
     /**
      * The player's nickname
      */
     private final String nickname;
 
+    private final String password;
+
     /**
      * Constructs a connection request with the specified nickname and color.
      * @param nickname the player's nickname
      */
-    public ConnectionRequest(String nickname){
+    public ConnectionRequest(String nickname, String password) {
         this.nickname = nickname;
-        this.output=null;
+        //this.output=null;
+        this.password = null;
     }
 
     /**
@@ -31,12 +32,12 @@ public class ConnectionRequest implements ExecutableInServer{
     @Override
     public void execute(MasterServer masterServer) {
 
-        SocketClientHandler clientHandler = new SocketClientHandler(output, nickname);
-        masterServer.addClientHandler(clientHandler, nickname);
+        //MySocketHandler clientHandler = new MySocketHandler(output, nickname);
+        masterServer.addClient(nickname, password);
     }
 
     public void setOutput(ObjectOutputStream output) {
-        this.output = output;
+        //this.output = output;
     }
 
     /**

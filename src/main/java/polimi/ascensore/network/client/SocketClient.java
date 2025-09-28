@@ -123,8 +123,8 @@ public class SocketClient {
 
     public void connect(String nickname) {
         //creo un nuovo comando di connessione
-        Command command = new Command(new ConnectionRequest(nickname), CommandType.CONNECTION_COMMAND);
-        sendCommand(command);
+        //Command command = new Command(new ConnectionRequest(nickname), CommandType.CONNECTION_COMMAND);
+        //sendCommand(command);
     }
 
 

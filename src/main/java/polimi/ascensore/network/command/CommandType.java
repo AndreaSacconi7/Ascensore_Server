@@ -2,7 +2,9 @@ package polimi.ascensore.network.command;
 
 public enum CommandType {
 
-    GENERIC_COMMAND,
     CONNECTION_COMMAND,
-    PONG_COMMAND,
+    LOGIN_COMMAND,
+    PING_COMMAND,
+    PUT_CARD,
+    SET_BET
 }
