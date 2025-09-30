@@ -1,7 +1,6 @@
 package polimi.ascensore.network.command;
 
 import java.io.Serializable;
-import polimi.ascensore.network.command.ExecutableInServer;
 
 
 public class Command implements Serializable {
@@ -9,7 +8,7 @@ public class Command implements Serializable {
     /**
      * The type of the command sended by the client.
      */
-    private final CommandType type;
+    private final CommandType commandType;
     /**
      * The executable inside the command.
      */
@@ -20,11 +19,11 @@ public class Command implements Serializable {
     /**
      * Constructs a command with the specified executable and type.
      * @param executable the executable inside the command.
-     * @param type the type of the command.
+     * @param commandType the type of the command.
      */
-    public Command(ExecutableInServer executable, CommandType type){
+    public Command(ExecutableInServer executable, CommandType commandType){
         this.executable = executable;
-        this.type = type;
+        this.commandType = commandType;
         this.clientSessionId = null;
     }
 
@@ -38,8 +37,8 @@ public class Command implements Serializable {
     /**
      * @return the type of the command.
      */
-    public CommandType getType(){
-        return this.type;
+    public CommandType getCommandType(){
+        return this.commandType;
     }
 
     public void setClientSessionId(String clientSessionId) {

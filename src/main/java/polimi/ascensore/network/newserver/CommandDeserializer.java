@@ -15,7 +15,7 @@ public class CommandDeserializer implements JsonDeserializer<Command> {
         JsonObject jsonObject = json.getAsJsonObject();
 
         // Leggi il tipo di comando
-        String commandType = jsonObject.get("type").getAsString();
+        String commandType = jsonObject.get("commandType").getAsString();
 
         // Deserializza l'eseguibile in base al tipo
         ExecutableInServer executable = null;

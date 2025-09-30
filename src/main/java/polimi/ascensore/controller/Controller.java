@@ -9,6 +9,7 @@ import polimi.ascensore.model.PlayerState;
 import polimi.ascensore.network.message.ExecutableInClient;
 import polimi.ascensore.network.message.LoginResponse;
 import polimi.ascensore.network.message.Message;
+import polimi.ascensore.network.message.MessageType;
 import polimi.ascensore.network.newserver.MySocketHandler;
 
 import java.io.FileNotFoundException;
@@ -34,9 +35,9 @@ public class Controller {
         this.gameNotifications = mySocketHandler;
     }
 
-    public void notifyAllClients(ExecutableInClient executable, String clientsessionId) {
+    public void notifyAllClients(ExecutableInClient executable, String clientsessionId, MessageType messageType) {
 
-        Message message = new Message(executable, clientsessionId);
+        Message message = new Message(executable, clientsessionId, messageType);
         synchronized (gameNotifications) {
 
             //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
@@ -44,9 +45,9 @@ public class Controller {
         }
     }
 
-    public void notifySingleClient(ExecutableInClient executable, String clientSessionId) {
+    public void notifySingleClient(ExecutableInClient executable, String clientSessionId, MessageType messageType) {
 
-        Message message = new Message(executable, clientSessionId);
+        Message message = new Message(executable, clientSessionId, messageType);
         synchronized (gameNotifications) {
 
             //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
@@ -80,7 +81,7 @@ public class Controller {
             connectedPlayers.add(p.getNickName());
         }
         LoginResponse loginResponse = new LoginResponse(true, nickName, connectedPlayers);
-        notifyAllClients(loginResponse, nickName);
+        notifyAllClients(loginResponse, nickName, MessageType.LOGIN_RESPONSE);
     }
 
 
