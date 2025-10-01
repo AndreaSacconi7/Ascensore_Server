@@ -16,7 +16,7 @@ import java.util.List;
 
 public class Game {
 
-    private final int NUM_PLAYER = 4;
+    public static final int NUM_PLAYER = 2;
 
     List<Player> players;
     //Round indica la partita (per gestire carte e scommesse)

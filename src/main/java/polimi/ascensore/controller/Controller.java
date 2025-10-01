@@ -14,10 +14,10 @@ import java.io.FileNotFoundException;
 import java.util.LinkedList;
 import java.util.List;
 
+import static polimi.ascensore.model.Game.NUM_PLAYER;
+
 @Service
 public class Controller {
-
-    private final int NUM_PLAYERS = 4;
 
     private final Game game;
 
@@ -123,7 +123,7 @@ public class Controller {
         notifyAllClients(loginResponse, nickName, MessageType.LOGIN_RESPONSE);
 
         //controllo condizione di inizio partita
-        if(game.getPlayers().size() == 4){
+        if(game.getPlayers().size() == NUM_PLAYER){
             startGame();
         }
     }
@@ -186,7 +186,7 @@ public class Controller {
         try {
             currentPlayer.updateState(PlayerState.WAIT);
 
-            if(game.getNumTurn() == (NUM_PLAYERS * 2) - 1){
+            if(game.getNumTurn() == (NUM_PLAYER * 2) - 1){
                 //alla fine del turno 7 si calcola il vincitore del round e si aggiornano le prese fatte dal winner player
                 String winnerTurnPlayerNickName = checkWinnerRoundPlayer();
                 Player winnerTurnPlayer = game.getPlayerByNickName(winnerTurnPlayerNickName);
@@ -218,7 +218,7 @@ public class Controller {
                     //TODO: notifica client fine round
                 }
 
-            }else if(game.getNumTurn() <= NUM_PLAYERS){
+            }else if(game.getNumTurn() <= NUM_PLAYER){
                 //turni da 0 a 3 per scommettere sulle prese
                 game.updateNumTurn();
                 Player nextPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn());
@@ -227,7 +227,7 @@ public class Controller {
             }else{
                 //turni da 4 a 7 per giocare
                 game.updateNumTurn();
-                Player nextPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn() - NUM_PLAYERS);
+                Player nextPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn() - NUM_PLAYER);
                 nextPlayer.updateState(PlayerState.PLAY);
                 //TODO: notifica client prossimo player a giocare
             }
