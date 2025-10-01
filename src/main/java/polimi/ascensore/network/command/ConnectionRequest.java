@@ -21,7 +21,7 @@ public class ConnectionRequest implements ExecutableInServer{
     public ConnectionRequest(String nickname, String password) {
         this.nickname = nickname;
         //this.output=null;
-        this.password = null;
+        this.password = password;
     }
 
     /**

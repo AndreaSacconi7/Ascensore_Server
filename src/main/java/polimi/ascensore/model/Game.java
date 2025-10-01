@@ -1,6 +1,7 @@
 package polimi.ascensore.model;
 
 import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
+import polimi.ascensore.model.exception.PlayerNicknameAlreadyExistException;
 
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
@@ -58,7 +59,11 @@ public class Game {
             tableCard.setBriscola(null);
     }
 
-    public void addPlayer(String nickName) {
+    public void addPlayer(String nickName) throws PlayerNicknameAlreadyExistException {
+        for( Player p : players) {
+            if(p.getNickName().equals(nickName))
+                throw new PlayerNicknameAlreadyExistException();
+        }
         Player player = new Player(nickName);
         players.add(player);
     }

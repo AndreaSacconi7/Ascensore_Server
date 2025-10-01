@@ -6,14 +6,13 @@ import polimi.ascensore.model.Card;
 import polimi.ascensore.model.Game;
 import polimi.ascensore.model.Player;
 import polimi.ascensore.model.PlayerState;
-import polimi.ascensore.network.message.ExecutableInClient;
-import polimi.ascensore.network.message.LoginResponse;
-import polimi.ascensore.network.message.Message;
-import polimi.ascensore.network.message.MessageType;
+import polimi.ascensore.model.exception.PlayerNicknameAlreadyExistException;
+import polimi.ascensore.network.message.*;
 import polimi.ascensore.network.newserver.MySocketHandler;
 
 import java.io.FileNotFoundException;
 import java.util.LinkedList;
+import java.util.List;
 
 @Service
 public class Controller {
@@ -35,23 +34,24 @@ public class Controller {
         this.gameNotifications = mySocketHandler;
     }
 
-    public void notifyAllClients(ExecutableInClient executable, String clientsessionId, MessageType messageType) {
+    public void notifyAllClients(ExecutableInClient executable, String nickname, MessageType messageType) {
 
-        Message message = new Message(executable, clientsessionId, messageType);
+        Message message = new Message(executable, nickname, messageType);
         synchronized (gameNotifications) {
 
             //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
-            gameNotifications.forwardUpdateToAll(message, clientsessionId);
+            gameNotifications.forwardUpdateToAll(message, nickname);
         }
     }
 
-    public void notifySingleClient(ExecutableInClient executable, String clientSessionId, MessageType messageType) {
+    //TODO: non funziona ancora perchè occorre collegare nickname e sessionID (o channel)
+    public void notifySingleClient(ExecutableInClient executable, String nickname, MessageType messageType) {
 
-        Message message = new Message(executable, clientSessionId, messageType);
+        Message message = new Message(executable, nickname, messageType);
         synchronized (gameNotifications) {
 
             //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
-            gameNotifications.forwardUpdateToSingleClient(message, clientSessionId);
+            gameNotifications.forwardUpdateToSingleClient(message, nickname);
         }
     }
 
@@ -70,18 +70,62 @@ public class Controller {
         } catch (IllegalAccessException e) {
             System.out.println("Illegal access");
         }
+
+        List<String> playerNicknames = new LinkedList<>();
+
+        for(Player p : game.getPlayers()){
+            playerNicknames.add(p.getNickName());
+        }
+
+        StartingGame startingGame = new StartingGame(playerNicknames);
+
+        notifyAllClients(startingGame, "", MessageType.STARTING_GAME);
+
+        for(Player p : game.getPlayers()){
+            //notifico a ogni player le sue carte in mano
+            List<Card> handCard = p.getHand();
+            HandUpdate handUpdate = new HandUpdate(handCard);
+            notifySingleClient(handUpdate, p.getNickName(), MessageType.HAND_UPDATE);
+        }
+        //notifico a tutti la briscola
+        Card briscola = game.getTableCard().getBriscola();
+        BriscolaUpdate briscolaUpdate = new BriscolaUpdate(briscola);
+        notifyAllClients(briscolaUpdate, "", MessageType.BRISCOLA_UPDATE);
+
+        //imposto il primo player di turno per scommettere
+        /*Player firstPlayer = game.getTableCard().getPlayerListOrder().get(0);
+        firstPlayer.updateState(PlayerState.BET);
+        TurnUpdate turnUpdate = new TurnUpdate(firstPlayer.getNickName(), PlayerState.BET);
+        notifyAllClients(turnUpdate, firstPlayer.getNickName(), MessageType.TURN_UPDATE);*/
     }
 
     public void addPlayer(String nickName) {
-        //TODO: controllare se il player è già presente
-        game.addPlayer(nickName);
 
         LinkedList<String> connectedPlayers = new LinkedList<>();
+        boolean isLogged = false;
+        LoginResponse loginResponse;
+
         for(Player p: game.getPlayers()){
             connectedPlayers.add(p.getNickName());
         }
-        LoginResponse loginResponse = new LoginResponse(true, nickName, connectedPlayers);
+
+        try{
+            game.addPlayer(nickName);
+            isLogged = true;
+            //gameNotifications.addNicknameToSessionIdNode(nickName, );
+
+        }catch(PlayerNicknameAlreadyExistException e){
+            System.out.println("Nickname already exists");
+        }
+
+        loginResponse = new LoginResponse(isLogged, nickName, connectedPlayers);
+
         notifyAllClients(loginResponse, nickName, MessageType.LOGIN_RESPONSE);
+
+        //controllo condizione di inizio partita
+        if(game.getPlayers().size() == 4){
+            startGame();
+        }
     }
 
 

@@ -18,6 +18,8 @@ public class MySocketHandler extends TextWebSocketHandler {
 
     HashMap<String, WebSocketSession> sessions;
 
+    HashMap<String, String> nicknameToSessionId;
+
     MasterServer masterServer;
 
     Gson gson;
@@ -25,6 +27,7 @@ public class MySocketHandler extends TextWebSocketHandler {
     public MySocketHandler(MasterServer masterServer) {
         this.masterServer = masterServer;
         this.sessions = new HashMap<>();
+        this.nicknameToSessionId = new HashMap<>();
         gson = new GsonBuilder()
                 .registerTypeAdapter(Command.class, new CommandDeserializer())
                 .create();
@@ -59,17 +62,22 @@ public class MySocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        sessions.put(null, session);
+        sessions.put(session.getId(), session);
         System.out.println("New connection established: " + session.getId());
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        sessions.remove(session);
+        for(Map.Entry<String, WebSocketSession> entry : sessions.entrySet()) {
+            if(entry.getValue() == session) {
+                sessions.remove(entry.getKey());
+                break;
+            }
+        }
         System.out.println("Connection closed: " + session.getId());
     }
 
-    public void forwardUpdateToAll(Message message, String clientSessionId) {
+    public void forwardUpdateToAll(Message message, String nickname) {
 
         WebSocketMessage<String> msg = new TextMessage(message.toJson());
         System.out.println("Sending: " + msg.getPayload());
@@ -84,22 +92,32 @@ public class MySocketHandler extends TextWebSocketHandler {
         }
     }
 
-    public void forwardUpdateToSingleClient(Message message, String clientSessionId){
+    public void forwardUpdateToSingleClient(Message message, String nickname){
 
-        for(Map.Entry<String, WebSocketSession> entry : sessions.entrySet()) {
-            if(entry.getKey().equals(clientSessionId)){
-                WebSocketSession session = entry.getValue();
-                try {
-                    WebSocketMessage<String> msg = new TextMessage(message.toJson());
-                    System.out.println("Sending to " + clientSessionId + ": " + msg.getPayload());
-                    session.sendMessage(msg);
-                } catch (IOException e) {
-                    System.err.println("Error sending message to client " + clientSessionId + ": " + e.getMessage());
-                    e.printStackTrace();
+        for(Map.Entry<String, String> entryNick : nicknameToSessionId.entrySet()) {
+            //cerco id correspondente al nickname
+            if(entryNick.getKey().equals(nickname)) {
+                for (Map.Entry<String, WebSocketSession> entryId : sessions.entrySet()) {
+                    //cerco session corrispondente all'id
+                    if(entryId.getKey().equals(entryNick.getValue())){
+                        WebSocketSession session = entryId.getValue();
+                        try {
+                            WebSocketMessage<String> msg = new TextMessage(message.toJson());
+                            System.out.println("Sending to " + nickname + ": " + msg.getPayload());
+                            session.sendMessage(msg);
+                        } catch (IOException e) {
+                            System.err.println("Error sending message to client " + nickname + ": " + e.getMessage());
+                            e.printStackTrace();
+                        }
+                        break; // Exit the loop once the matching session is found
+                    }
                 }
-                break; // Exit the loop once the matching session is found
             }
         }
+    }
+
+    public void addNicknameToSessionIdNode(String nickname, String sessionId){
+        nicknameToSessionId.put(nickname, sessionId);
     }
 
 

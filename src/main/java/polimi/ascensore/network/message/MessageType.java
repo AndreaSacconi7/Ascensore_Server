@@ -3,6 +3,8 @@ package polimi.ascensore.network.message;
 public enum MessageType {
 
     LOGIN_RESPONSE,
-    GAME_START,
+    STARTING_GAME,
+    HAND_UPDATE,
+    BRISCOLA_UPDATE,
     ERROR_MESSAGE,
 }
