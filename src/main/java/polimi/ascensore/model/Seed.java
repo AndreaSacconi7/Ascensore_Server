@@ -1,6 +1,8 @@
 package polimi.ascensore.model;
 
-public enum Seed {
+import java.io.Serializable;
+
+public enum Seed implements Serializable {
 
     STICKS,
     SWORDS,

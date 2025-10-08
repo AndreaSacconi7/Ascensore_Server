@@ -21,8 +21,8 @@ public class Deck {
         this.cardStack = new Stack<>();
     }
 
-    public void createCardDeck() throws FileNotFoundException, InstantiationException, IllegalAccessException, ClassNotFoundException {
-        InputStream is = getClass().getResourceAsStream("/CardsFiles/ResourceCardFile.json");
+    public void createCardDeck() throws FileNotFoundException {
+        InputStream is = getClass().getResourceAsStream("/CardsFiles/Card.json");
         if (is == null) {
             throw new FileNotFoundException("Il file 'CardFile.json' non è stato trovato");
         }

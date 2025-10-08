@@ -1,118 +1,118 @@
 [
   {
     "value": 1,
-    "seed": "coins"
+    "seed": "COINS"
   },
   {
     "value": 2,
-    "seed": "coins"
+    "seed": "COINS"
   },
   {
     "value": 3,
-    "seed": "coins"
+    "seed": "COINS"
   },
   {
     "value": 4,
-    "seed": "coins"
+    "seed": "COINS"
   },
   {
     "value": 5,
-    "seed": "coins"
+    "seed": "COINS"
   },
   {
     "value": 6,
-    "seed": "coins"
+    "seed": "COINS"
   },
   {
     "value": 7,
-    "seed": "coins"
+    "seed": "COINS"
   },
   {
     "value": 8,
-    "seed": "coins"
+    "seed": "COINS"
   },
   {
     "value": 9,
-    "seed": "coins"
+    "seed": "COINS"
   },
   {
     "value": 10,
-    "seed": "coins"
+    "seed": "COINS"
   },
   {
     "value": 1,
-    "seed": "cups"
+    "seed": "CUPS"
   },
   {
     "value": 2,
-    "seed": "cups"
+    "seed": "CUPS"
   },
   {
     "value": 3,
-    "seed": "cups"
+    "seed": "CUPS"
   },
   {
     "value": 4,
-    "seed": "cups"
+    "seed": "CUPS"
   },
   {
     "value": 5,
-    "seed": "cups"
+    "seed": "CUPS"
   },
   {
     "value": 6,
-    "seed": "cups"
+    "seed": "CUPS"
   },
   {
     "value": 7,
-    "seed": "cups"
+    "seed": "CUPS"
   },
   {
     "value": 8,
-    "seed": "cups"
+    "seed": "CUPS"
   },
   {
     "value": 9,
-    "seed": "cups"
+    "seed": "CUPS"
   },
   {
     "value": 10,
-    "seed": "cups"
+    "seed": "CUPS"
   },
   {
     "value": 2,
-    "seed": "swords"
+    "seed": "SWORDS"
   },
   {
     "value": 3,
-    "seed": "swords"
+    "seed": "SWORDS"
   },
   {
     "value": 4,
-    "seed": "swords"
+    "seed": "SWORDS"
   },
   {
     "value": 5,
-    "seed": "swords"
+    "seed": "SWORDS"
   },
   {
     "value": 6,
-    "seed": "swords"
+    "seed": "SWORDS"
   },
   {
     "value": 7,
-    "seed": "swords"
+    "seed": "SWORDS"
   },
   {
     "value": 8,
-    "seed": "swords"
+    "seed": "SWORDS"
   },
   {
     "value": 9,
-    "seed": "swords"
+    "seed": "SWORDS"
   },
   {
     "value": 10,
-    "seed": "swords"
+    "seed": "SWORDS"
   }
 ]

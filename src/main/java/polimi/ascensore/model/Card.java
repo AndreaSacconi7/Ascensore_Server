@@ -1,7 +1,8 @@
 package polimi.ascensore.model;
 
+import java.io.Serializable;
 
-public class Card {
+public class Card implements Serializable {
 
     private final Seed seed;
 
