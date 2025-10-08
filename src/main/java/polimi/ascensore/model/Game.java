@@ -16,12 +16,13 @@ import java.util.List;
 
 public class Game {
 
+    public static int setVariation = 1;
+
     public static final int NUM_PLAYER = 2;
 
     List<Player> players;
     //Round indica la partita (per gestire carte e scommesse)
     //numTurn indica il turno di gioco (per gestire le azioni dei giocatori)
-
     private int set;
 
     private int round;
@@ -34,6 +35,7 @@ public class Game {
 
     public Game() {
         this.players = new ArrayList<>();
+        this.set = 1;
         this.round = 1;
         this.numTurn = 0;
         this.deck = new Deck();
@@ -42,15 +44,14 @@ public class Game {
 
     public void startGame() throws FileNotFoundException, ClassNotFoundException, InstantiationException, IllegalAccessException {
         deck.createCardDeck();
+        tableCard.setPlayerListOrder(players);
     }
 
     public void distributeCards() {
         for(Player p : players) {
-            for(int i = 0; i < NUM_PLAYER; i++) {
-                //aggiungp #set carte per ogni giocatore
-                for(int j = 0; j < set; j++)
-                    p.addCardToHand(deck.getDeckcards().pop());
-            }
+            //aggiungp #set carte per ogni giocatore
+            for(int j = 0; j < set; j++)
+                p.addCardToHand(deck.getDeckcards().pop());
         }
         //aggiungo la briscola tranne nel set 10
         if(!deck.getDeckcards().isEmpty())
@@ -69,7 +70,19 @@ public class Game {
     }
 
     public void updateSet() {
-        this.set++;
+        //quando arrivo a dieci devo diminuire i set anzichè aumentarli
+        if(set == 10)
+            setVariation = -1;
+        else if(setVariation == -1 && set == 1){
+            //ho finito ultimo set
+            endGame();
+        }
+
+        this.set = this.set + setVariation;
+    }
+
+    public void endGame(){
+
     }
 
     public void updateRound() {

@@ -44,7 +44,6 @@ public class Controller {
         }
     }
 
-    //TODO: non funziona ancora perchè occorre collegare nickname e sessionID (o channel)
     public void notifySingleClient(ExecutableInClient executable, String nickname, MessageType messageType) {
 
         Message message = new Message(executable, nickname, messageType);
@@ -97,9 +96,14 @@ public class Controller {
         firstPlayer.updateState(PlayerState.BET);
         TurnUpdate turnUpdate = new TurnUpdate(firstPlayer.getNickName(), PlayerState.BET);
         notifyAllClients(turnUpdate, firstPlayer.getNickName(), MessageType.TURN_UPDATE);*/
+
+        Player firstPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn());
+        firstPlayer.updateState(PlayerState.BET);
+        PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET);
+        notifyAllClients(playerStateUpdate, firstPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
     }
 
-    public void addPlayer(String nickName) {
+    public void addPlayer(String nickName, String clientSessionId) {
 
         LinkedList<String> connectedPlayers = new LinkedList<>();
         boolean isLogged = false;
@@ -112,7 +116,7 @@ public class Controller {
         try{
             game.addPlayer(nickName);
             isLogged = true;
-            //gameNotifications.addNicknameToSessionIdNode(nickName, );
+            gameNotifications.addNicknameToSessionIdNode(nickName, clientSessionId);
 
         }catch(PlayerNicknameAlreadyExistException e){
             System.out.println("Nickname already exists");

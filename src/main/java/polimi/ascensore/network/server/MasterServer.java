@@ -71,10 +71,10 @@ public class MasterServer {
         }
     }
 
-    public void addClient(String nickName, String password){
+    public void addClient(String nickName, String password, String clientSessionId) {
 
         //controller.addClientHandler(clientHandler);
-        controller.addPlayer(nickName);
+        controller.addPlayer(nickName, clientSessionId);
     }
 
     public void setSocketHandler(MySocketHandler socketHandler) {

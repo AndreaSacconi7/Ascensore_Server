@@ -6,5 +6,6 @@ public enum MessageType {
     STARTING_GAME,
     HAND_UPDATE,
     BRISCOLA_UPDATE,
+    PLAYER_STATE_UPDATE,
     ERROR_MESSAGE,
 }

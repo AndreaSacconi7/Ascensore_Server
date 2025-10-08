@@ -14,6 +14,8 @@ public class ConnectionRequest implements ExecutableInServer{
 
     private final String password;
 
+    private String clientSessionId;
+
     /**
      * Constructs a connection request with the specified nickname and color.
      * @param nickname the player's nickname
@@ -22,6 +24,8 @@ public class ConnectionRequest implements ExecutableInServer{
         this.nickname = nickname;
         //this.output=null;
         this.password = password;
+
+        clientSessionId = null;
     }
 
     /**
@@ -33,7 +37,12 @@ public class ConnectionRequest implements ExecutableInServer{
     public void execute(MasterServer masterServer) {
 
         //MySocketHandler clientHandler = new MySocketHandler(output, nickname);
-        masterServer.addClient(nickname, password);
+        masterServer.addClient(nickname, password, clientSessionId);
+    }
+
+    @Override
+    public void setClientSessionId(String clientSessionId) {
+        this.clientSessionId = clientSessionId;
     }
 
     public void setOutput(ObjectOutputStream output) {

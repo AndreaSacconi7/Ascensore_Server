@@ -43,5 +43,6 @@ public class Command implements Serializable {
 
     public void setClientSessionId(String clientSessionId) {
         this.clientSessionId = clientSessionId;
+        executable.setClientSessionId(clientSessionId);
     }
 }
