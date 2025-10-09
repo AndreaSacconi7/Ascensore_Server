@@ -99,7 +99,7 @@ public class Controller {
 
         Player firstPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn());
         firstPlayer.updateState(PlayerState.BET);
-        PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET);
+        PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET, firstPlayer.getNickName());
         notifyAllClients(playerStateUpdate, firstPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
     }
 
