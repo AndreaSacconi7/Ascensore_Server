@@ -2,6 +2,7 @@ package polimi.ascensore.network.server;
 
 import org.springframework.stereotype.Service;
 import polimi.ascensore.controller.Controller;
+import polimi.ascensore.model.Seed;
 import polimi.ascensore.network.command.Command;
 import polimi.ascensore.network.command.ExecutableInServer;
 import polimi.ascensore.network.newserver.MySocketHandler;
@@ -56,8 +57,8 @@ public class MasterServer {
         }
     }
 
-    public void putCard(int indexHand, String nickName) {
-        controller.putCard(indexHand, nickName);
+    public void putCard(Seed seed, int value, String nickName) {
+        controller.putCard(seed, value, nickName);
     }
 
     public void setBet(int bet, String nickName) {

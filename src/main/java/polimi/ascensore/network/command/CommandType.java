@@ -2,6 +2,8 @@ package polimi.ascensore.network.command;
 
 public enum CommandType {
 
+    //RICORDARSI DI AGGIUNGERE IL COMMANDTYPE IN COMMAND DESERIALIZER PER FARLO FUNZIONARE
+
     //comando di login inviato dal client per l'autenticazione e aggiungersi alla partita
     LOGIN_COMMAND,
     //comando di ping inviato dal client per verificare la connessione con il server

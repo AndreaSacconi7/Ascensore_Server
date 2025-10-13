@@ -1,11 +1,9 @@
 package polimi.ascensore.controller;
 
+import org.hibernate.sql.Update;
 import org.springframework.stereotype.Service;
+import polimi.ascensore.model.*;
 import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
-import polimi.ascensore.model.Card;
-import polimi.ascensore.model.Game;
-import polimi.ascensore.model.Player;
-import polimi.ascensore.model.PlayerState;
 import polimi.ascensore.model.exception.PlayerNicknameAlreadyExistException;
 import polimi.ascensore.network.message.*;
 import polimi.ascensore.network.newserver.MySocketHandler;
@@ -96,6 +94,11 @@ public class Controller {
         firstPlayer.updateState(PlayerState.BET);
         TurnUpdate turnUpdate = new TurnUpdate(firstPlayer.getNickName(), PlayerState.BET);
         notifyAllClients(turnUpdate, firstPlayer.getNickName(), MessageType.TURN_UPDATE);*/
+        for(Player p : game.getPlayers()){
+            p.updateState(PlayerState.WAIT);
+            PlayerStateUpdate initialStateUpdate = new PlayerStateUpdate(PlayerState.WAIT, p.getNickName());
+            notifyAllClients(initialStateUpdate, p.getNickName(), MessageType.PLAYER_STATE_UPDATE);
+        }
 
         Player firstPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn());
         firstPlayer.updateState(PlayerState.BET);
@@ -133,27 +136,42 @@ public class Controller {
     }
 
 
-    public void putCard(int indexHand, String nickName) {
+    public void putCard(Seed seed, int value, String nickName) {
 
         try {
             Player player = game.getPlayerByNickName(nickName);
 
             //controllare se player è attivo, può giocare la carta
-            if (player.getPlayerState() != PlayerState.PLAY) {
+            if (player.getPlayerState() != PlayerState.PUT) {
                 //GenericMessage error = new GenericMessage(nickName + " can't put a card now");
                 //notifyObservers(error, nickName);
+                TextMessage error = new TextMessage(nickName + " can't put a card now");
+                notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
+                return;
+            }
+            //controllo se il player ha la carta in mano
+            Card card = null;
+            for(Card c : player.getHand()){
+                if(c.getSeed() == seed && c.getValue() == value){
+                    card = c;
+                    break;
+                }
+            }
+            if(card == null){
+                //notifica client carta non valida
+                TextMessage error = new TextMessage("Invalid card played by " + nickName);
+                notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
                 return;
             }
             //controllo se la carta è valida oppure non può giocarla per i vincoli sui seed
-            Card card = player.getHand().get(indexHand);
             if(checkIfValidCard(card, player)){
                 game.getTableCard().getPlayedCards().add(card);
-                player.removeCardFromHand(indexHand);
+                player.removeCardFromHand(value);
                 //cambio turno
                 updateTurn(player);
             }else{
-                //TODO: notifica client carta non valida
-
+                TextMessage error = new TextMessage("Invalid card played by " + nickName + ", must follow the seed of the first card played");
+                notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
             }
 
         } catch (PlayerNickNameDoesNotExist e) {
@@ -169,6 +187,8 @@ public class Controller {
             if (player.getPlayerState() != PlayerState.BET) {
                 //GenericMessage error = new GenericMessage(nickName + " can't put a card now");
                 //notifyObservers(error, nickName);
+                TextMessage error = new TextMessage(nickName + " can't set a bet now");
+                notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
                 return;
             }
             //controllare se la scommessa è valida oppure bet totali == num giocatori (quindi invalida)
@@ -177,7 +197,9 @@ public class Controller {
                 updateTurn(player);
 
             } else {
-                //TODO: notifica client scommessa non valida
+                //notifica client scommessa non valida
+                TextMessage error = new TextMessage("Invalid bet of " + nickName + ", total bet can't be equal to number of players");
+                notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
             }
 
         } catch (PlayerNickNameDoesNotExist e) {
@@ -212,29 +234,36 @@ public class Controller {
                     Player nextPlayer = game.getPlayers().get(game.getRound());
                     game.getTableCard().updatePlayerListOrder(nextPlayer);
                     game.getTableCard().getPlayerListOrder().get(0).updateState(PlayerState.BET);
-                    //TODO: notifica client fine set
+                    //TODO: notifica client fine set con punteggi di tutto il set, vincitore round, nuovo playerListOrder e nuovo state per next player
                 }else{
                     //aggiorno playerList per il prossimo round (devo cambiare l'ordine di gioco del player)
                     game.updateRound();
                     game.resetNumTurn();
                     game.getTableCard().updatePlayerListOrder(winnerTurnPlayer);
                     game.getTableCard().getPlayerListOrder().get(0).updateState(PlayerState.BET);
-                    //TODO: notifica client fine round
+                    //TODO: notifica client fine round con vincitore round (chi ha fatto la presa), nuovo playerListOrder e nuovo state per next player
                 }
 
-            }else if(game.getNumTurn() <= NUM_PLAYER){
-                //turni da 0 a 3 per scommettere sulle prese
+            }else if(game.getNumTurn() < NUM_PLAYER - 1){
+                //turni da 0 a 3 per scommettere sulle prese (entro qui quando turno appena passato è 0,1,2)
                 game.updateNumTurn();
                 Player nextPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn());
                 nextPlayer.updateState(PlayerState.BET);
-                //TODO: notifica client prossimo player a scommettere
+                // notifica client prossimo player a scommettere
+                PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET, nextPlayer.getNickName());
+                notifyAllClients(playerStateUpdate, nextPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
             }else{
-                //turni da 4 a 7 per giocare
+                //turni da 4 a 7 per giocare (entro qui quando turno appena passato è 3,4,5,6)
                 game.updateNumTurn();
                 Player nextPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn() - NUM_PLAYER);
-                nextPlayer.updateState(PlayerState.PLAY);
-                //TODO: notifica client prossimo player a giocare
+                nextPlayer.updateState(PlayerState.PUT);
+                // notifica client prossimo player a giocare
+                PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.PUT, nextPlayer.getNickName());
+                notifyAllClients(playerStateUpdate, nextPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
             }
+            //currentPlayer diventa WAIT
+            PlayerStateUpdate playerStateUpdateCurrent = new PlayerStateUpdate(PlayerState.WAIT, currentPlayer.getNickName());
+            notifyAllClients(playerStateUpdateCurrent, currentPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
 
         } catch (PlayerNickNameDoesNotExist e) {
             System.out.println("Player not found");
@@ -253,12 +282,14 @@ public class Controller {
         return game.getTableCard().getPlayerListOrder().get(winnerIndex).getNickName();
     }
 
+    //TODO: sistemare controllo scommessa valida perchè non va bene
     private boolean checkIfValidBet(int bet) {
-        int totalBet = 0;
+        int totalBet = bet;
+        //scorro tutti i player tanto chi non ha scommesso ha bet 0
         for(Player p : game.getPlayers()) {
             totalBet = totalBet + p.getBet();
         }
-        if(totalBet == bet) {
+        if(totalBet == game.getSet()) {
             return false;
         }
         return true;

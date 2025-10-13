@@ -7,5 +7,5 @@ public enum MessageType {
     HAND_UPDATE,
     BRISCOLA_UPDATE,
     PLAYER_STATE_UPDATE,
-    ERROR_MESSAGE,
+    TEXT_MESSAGE,
 }

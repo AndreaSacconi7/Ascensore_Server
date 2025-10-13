@@ -49,8 +49,9 @@ public class Game {
 
     public void distributeCards() {
         for(Player p : players) {
+            //TODO: nel for va messo set anzichè 10 che è messo per test
             //aggiungp #set carte per ogni giocatore
-            for(int j = 0; j < set; j++)
+            for(int j = 0; j < 10; j++)
                 p.addCardToHand(deck.getDeckcards().pop());
         }
         //aggiungo la briscola tranne nel set 10

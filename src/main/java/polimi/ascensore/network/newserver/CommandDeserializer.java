@@ -1,10 +1,7 @@
 package polimi.ascensore.network.newserver;
 
 import com.google.gson.*;
-import polimi.ascensore.network.command.Command;
-import polimi.ascensore.network.command.CommandType;
-import polimi.ascensore.network.command.ConnectionRequest;
-import polimi.ascensore.network.command.ExecutableInServer;
+import polimi.ascensore.network.command.*;
 
 import java.lang.reflect.Type;
 
@@ -21,13 +18,11 @@ public class CommandDeserializer implements JsonDeserializer<Command> {
         ExecutableInServer executable = null;
         if ("LOGIN_COMMAND".equals(commandType)) {
             executable = context.deserialize(jsonObject.get("executable"), ConnectionRequest.class);
-        /*}else if("PING_COMMAND".equals(commandType)) {
-            //executable = context.deserialize(jsonObject.get("executable"), PingCommand.class);
-        } else if ("PUT_CARD".equals(commandType)) {
-            //executable = context.deserialize(jsonObject.get("executable"), PutCardCommand.class);
         } else if ("SET_BET".equals(commandType)) {
-            //executable = context.deserialize(jsonObject.get("executable"), SetBetCommand.class);
-        */} else{
+            executable = context.deserialize(jsonObject.get("executable"), SetBet.class);
+        } else if ("PUT_CARD".equals(commandType)) {
+            executable = context.deserialize(jsonObject.get("executable"), PutCard.class);
+        } else{
             //comando sconosciuto
             throw new JsonParseException("Unknown command type: " + commandType);
         }
