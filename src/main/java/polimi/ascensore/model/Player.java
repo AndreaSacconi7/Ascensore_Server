@@ -1,5 +1,7 @@
 package polimi.ascensore.model;
 
+import polimi.ascensore.model.exception.InvalidCard;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -47,8 +49,14 @@ public class Player {
         this.playerState = playerState;
     }
 
-    public void removeCardFromHand(int index){
-        hand.remove(index);
+    public void removeCardFromHand(Seed seed, int value) throws InvalidCard {
+        for(Card card : hand){
+            if(card.getSeed() == seed && card.getValue() == value){
+                hand.remove(card);
+                return;
+            }
+        }
+        throw new InvalidCard();
     }
 
     public void addCardToHand(Card card){

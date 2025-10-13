@@ -36,8 +36,8 @@ public class Game {
     public Game() {
         this.players = new ArrayList<>();
         this.set = 1;
-        this.round = 1;
-        this.numTurn = 0;
+        resetRound();
+        resetNumTurn();
         this.deck = new Deck();
         this.tableCard = new TableCard();
     }
@@ -51,7 +51,7 @@ public class Game {
         for(Player p : players) {
             //TODO: nel for va messo set anzichè 10 che è messo per test
             //aggiungp #set carte per ogni giocatore
-            for(int j = 0; j < 10; j++)
+            for(int j = 0; j < set; j++)
                 p.addCardToHand(deck.getDeckcards().pop());
         }
         //aggiungo la briscola tranne nel set 10
@@ -83,7 +83,7 @@ public class Game {
     }
 
     public void endGame(){
-
+        System.out.println("Game Over");
     }
 
     public void updateRound() {

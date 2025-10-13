@@ -3,12 +3,14 @@ package polimi.ascensore.controller;
 import org.hibernate.sql.Update;
 import org.springframework.stereotype.Service;
 import polimi.ascensore.model.*;
+import polimi.ascensore.model.exception.InvalidCard;
 import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
 import polimi.ascensore.model.exception.PlayerNicknameAlreadyExistException;
 import polimi.ascensore.network.message.*;
 import polimi.ascensore.network.newserver.MySocketHandler;
 
 import java.io.FileNotFoundException;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -78,16 +80,7 @@ public class Controller {
 
         notifyAllClients(startingGame, "", MessageType.STARTING_GAME);
 
-        for(Player p : game.getPlayers()){
-            //notifico a ogni player le sue carte in mano
-            List<Card> handCard = p.getHand();
-            HandUpdate handUpdate = new HandUpdate(handCard);
-            notifySingleClient(handUpdate, p.getNickName(), MessageType.HAND_UPDATE);
-        }
-        //notifico a tutti la briscola
-        Card briscola = game.getTableCard().getBriscola();
-        BriscolaUpdate briscolaUpdate = new BriscolaUpdate(briscola);
-        notifyAllClients(briscolaUpdate, "", MessageType.BRISCOLA_UPDATE);
+        notifyDistributedCards();
 
         //imposto il primo player di turno per scommettere
         /*Player firstPlayer = game.getTableCard().getPlayerListOrder().get(0);
@@ -104,6 +97,19 @@ public class Controller {
         firstPlayer.updateState(PlayerState.BET);
         PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET, firstPlayer.getNickName());
         notifyAllClients(playerStateUpdate, firstPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
+    }
+
+    private void notifyDistributedCards(){
+        for(Player p : game.getPlayers()){
+            //notifico a ogni player le sue carte in mano
+            List<Card> handCard = p.getHand();
+            HandUpdate handUpdate = new HandUpdate(handCard);
+            notifySingleClient(handUpdate, p.getNickName(), MessageType.HAND_UPDATE);
+        }
+        //notifico a tutti la briscola
+        Card briscola = game.getTableCard().getBriscola();
+        BriscolaUpdate briscolaUpdate = new BriscolaUpdate(briscola);
+        notifyAllClients(briscolaUpdate, "", MessageType.BRISCOLA_UPDATE);
     }
 
     public void addPlayer(String nickName, String clientSessionId) {
@@ -166,7 +172,7 @@ public class Controller {
             //controllo se la carta è valida oppure non può giocarla per i vincoli sui seed
             if(checkIfValidCard(card, player)){
                 game.getTableCard().getPlayedCards().add(card);
-                player.removeCardFromHand(value);
+                player.removeCardFromHand(seed, value);
                 //cambio turno
                 updateTurn(player);
             }else{
@@ -176,6 +182,10 @@ public class Controller {
 
         } catch (PlayerNickNameDoesNotExist e) {
             System.out.println("Player not found");
+        } catch (InvalidCard e) {
+            System.out.println("Invalid card");
+            TextMessage error = new TextMessage("Invalid card played by " + nickName);
+            notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
         }
     }
 
@@ -211,8 +221,11 @@ public class Controller {
     private void updateTurn(Player currentPlayer) {
         try {
             currentPlayer.updateState(PlayerState.WAIT);
+            //currentPlayer diventa WAIT
+            PlayerStateUpdate playerStateUpdateCurrent = new PlayerStateUpdate(PlayerState.WAIT, currentPlayer.getNickName());
+            notifyAllClients(playerStateUpdateCurrent, currentPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
 
-            if(game.getNumTurn() == (NUM_PLAYER * 2) - 1){
+            if(game.getNumTurn() == ((NUM_PLAYER * 2) - 1) + 2*(game.getRound())){
                 //alla fine del turno 7 si calcola il vincitore del round e si aggiornano le prese fatte dal winner player
                 String winnerTurnPlayerNickName = checkWinnerRoundPlayer();
                 Player winnerTurnPlayer = game.getPlayerByNickName(winnerTurnPlayerNickName);
@@ -221,11 +234,13 @@ public class Controller {
 
                 //entro in questo if solo se ho finito tutti i round del set
                 if(game.getRound() + 1 == game.getSet()) {
+                    //FINE SET
                     //finiti tutti i round del set quindi si calcolano punteggi
                     updateScore();
                     game.updateSet();
                     game.resetRound();
                     game.resetNumTurn();
+                    game.getTableCard().resetPlayedCard();
                     resetBetAndRoundsWon();
                     //aggiorna deck e distribuisce carte e briscola
                     game.getDeck().shuffleDeck();
@@ -235,13 +250,38 @@ public class Controller {
                     game.getTableCard().updatePlayerListOrder(nextPlayer);
                     game.getTableCard().getPlayerListOrder().get(0).updateState(PlayerState.BET);
                     //TODO: notifica client fine set con punteggi di tutto il set, vincitore round, nuovo playerListOrder e nuovo state per next player
+                    HashMap<String, Integer> nextPlayerOrderAndScore = new HashMap<>();
+                    for(Player p : game.getTableCard().getPlayerListOrder()){
+                        nextPlayerOrderAndScore.put(p.getNickName(), p.getScore());
+                    }
+                    EndSetUpdate endSetUpdate = new EndSetUpdate(game.getSet(), nextPlayerOrderAndScore);
+                    notifyAllClients(endSetUpdate, "", MessageType.END_SET);
+
+                    notifyDistributedCards();
+
+                    String nextPlayerNickName = game.getTableCard().getPlayerListOrder().get(0).getNickName();
+                    PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET, nextPlayerNickName);
+                    notifyAllClients(playerStateUpdate, nextPlayerNickName, MessageType.PLAYER_STATE_UPDATE);
                 }else{
+                    //FINE ROUND
                     //aggiorno playerList per il prossimo round (devo cambiare l'ordine di gioco del player)
                     game.updateRound();
-                    game.resetNumTurn();
+                    game.updateNumTurn();
+                    //game.resetNumTurn();
+                    game.getTableCard().resetPlayedCard();
                     game.getTableCard().updatePlayerListOrder(winnerTurnPlayer);
-                    game.getTableCard().getPlayerListOrder().get(0).updateState(PlayerState.BET);
+                    game.getTableCard().getPlayerListOrder().get(0).updateState(PlayerState.PUT);
                     //TODO: notifica client fine round con vincitore round (chi ha fatto la presa), nuovo playerListOrder e nuovo state per next player
+                    HashMap<String, Integer> nextPlayerOrderAndTaken = new HashMap<>();
+                    for(Player p : game.getTableCard().getPlayerListOrder()){
+                        nextPlayerOrderAndTaken.put(p.getNickName(), p.getRoundsWon());
+                    }
+                    EndRoundUpdate endRoundUpdate = new EndRoundUpdate(game.getRound(), nextPlayerOrderAndTaken);
+                    notifyAllClients(endRoundUpdate, "", MessageType.END_ROUND);
+
+                    String nextPlayerNickName = game.getTableCard().getPlayerListOrder().get(0).getNickName();
+                    PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.PUT, nextPlayerNickName);
+                    notifyAllClients(playerStateUpdate, nextPlayerNickName, MessageType.PLAYER_STATE_UPDATE);
                 }
 
             }else if(game.getNumTurn() < NUM_PLAYER - 1){
@@ -255,15 +295,12 @@ public class Controller {
             }else{
                 //turni da 4 a 7 per giocare (entro qui quando turno appena passato è 3,4,5,6)
                 game.updateNumTurn();
-                Player nextPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn() - NUM_PLAYER);
+                Player nextPlayer = game.getTableCard().getPlayerListOrder().get((game.getNumTurn() - NUM_PLAYER) % NUM_PLAYER);
                 nextPlayer.updateState(PlayerState.PUT);
                 // notifica client prossimo player a giocare
                 PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.PUT, nextPlayer.getNickName());
                 notifyAllClients(playerStateUpdate, nextPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
             }
-            //currentPlayer diventa WAIT
-            PlayerStateUpdate playerStateUpdateCurrent = new PlayerStateUpdate(PlayerState.WAIT, currentPlayer.getNickName());
-            notifyAllClients(playerStateUpdateCurrent, currentPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
 
         } catch (PlayerNickNameDoesNotExist e) {
             System.out.println("Player not found");

@@ -8,4 +8,6 @@ public enum MessageType {
     BRISCOLA_UPDATE,
     PLAYER_STATE_UPDATE,
     TEXT_MESSAGE,
+    END_ROUND,
+    END_SET,
 }

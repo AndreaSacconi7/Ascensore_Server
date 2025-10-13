@@ -9,10 +9,9 @@ import java.util.Stack;
 
 public class Deck {
 
-    private Stack<Card> deckcards;
-
     transient Gson gson = new Gson();
 
+    private Stack<Card> deckcards;
     //stack di carte che non viene modificato ma viene usato per ripristinare il mazzo
     private Stack<Card> cardStack;
 
@@ -50,6 +49,6 @@ public class Deck {
     }
 
     public Stack<Card> getDeckcards() {
-        return cardStack;
+        return deckcards;
     }
 }
