@@ -173,6 +173,9 @@ public class Controller {
             if(checkIfValidCard(card, player)){
                 game.getTableCard().getPlayedCards().add(card);
                 player.removeCardFromHand(seed, value);
+                //notifico a tutti i player la carta giocata
+                PlayedCardUpdate playedCardUpdate = new PlayedCardUpdate(card, nickName);
+                notifyAllClients(playedCardUpdate, nickName, MessageType.PLAYED_CARD);
                 //cambio turno
                 updateTurn(player);
             }else{
@@ -202,8 +205,11 @@ public class Controller {
                 return;
             }
             //controllare se la scommessa è valida oppure bet totali == num giocatori (quindi invalida)
-            if (checkIfValidBet(bet)) {
+            if (checkIfValidBet(bet, nickName)) {
                 player.updateBet(bet);
+                //notifico a tutti i player la scommessa fatta
+                SettedBetUpdate settedBetUpdate = new SettedBetUpdate(nickName, bet);
+                notifyAllClients(settedBetUpdate, nickName, MessageType.SETTED_BET);
                 updateTurn(player);
 
             } else {
@@ -249,7 +255,7 @@ public class Controller {
                     Player nextPlayer = game.getPlayers().get(game.getRound());
                     game.getTableCard().updatePlayerListOrder(nextPlayer);
                     game.getTableCard().getPlayerListOrder().get(0).updateState(PlayerState.BET);
-                    //TODO: notifica client fine set con punteggi di tutto il set, vincitore round, nuovo playerListOrder e nuovo state per next player
+                    //notifica client fine set con punteggi di tutto il set, vincitore round, nuovo playerListOrder e nuovo state per next player
                     HashMap<String, Integer> nextPlayerOrderAndScore = new HashMap<>();
                     for(Player p : game.getTableCard().getPlayerListOrder()){
                         nextPlayerOrderAndScore.put(p.getNickName(), p.getScore());
@@ -271,7 +277,7 @@ public class Controller {
                     game.getTableCard().resetPlayedCard();
                     game.getTableCard().updatePlayerListOrder(winnerTurnPlayer);
                     game.getTableCard().getPlayerListOrder().get(0).updateState(PlayerState.PUT);
-                    //TODO: notifica client fine round con vincitore round (chi ha fatto la presa), nuovo playerListOrder e nuovo state per next player
+                    //notifica client fine round con vincitore round (chi ha fatto la presa), nuovo playerListOrder e nuovo state per next player
                     HashMap<String, Integer> nextPlayerOrderAndTaken = new HashMap<>();
                     for(Player p : game.getTableCard().getPlayerListOrder()){
                         nextPlayerOrderAndTaken.put(p.getNickName(), p.getRoundsWon());
@@ -319,15 +325,20 @@ public class Controller {
         return game.getTableCard().getPlayerListOrder().get(winnerIndex).getNickName();
     }
 
-    //TODO: sistemare controllo scommessa valida perchè non va bene
-    private boolean checkIfValidBet(int bet) {
+    private boolean checkIfValidBet(int bet, String nickname) {
         int totalBet = bet;
-        //scorro tutti i player tanto chi non ha scommesso ha bet 0
-        for(Player p : game.getPlayers()) {
-            totalBet = totalBet + p.getBet();
-        }
-        if(totalBet == game.getSet()) {
+        if(bet > game.getSet() || bet < 0) {
             return false;
+        }
+        //entro se sta scommettendo l'ultimo player
+        if(game.getTableCard().getPlayerListOrder().get(game.getPlayers().size()-1).getNickName().equals(nickname)){
+            //scorro tutti i player fino all'ultimo che scommette (anche l'ultimo tanto avrà bet = 0 dato che la sta impostando ora)
+            for(Player p : game.getPlayers()) {
+                totalBet = totalBet + p.getBet();
+            }
+            if(totalBet == game.getSet()) {
+                return false;
+            }
         }
         return true;
     }

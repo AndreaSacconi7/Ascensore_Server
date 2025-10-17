@@ -7,6 +7,8 @@ public enum MessageType {
     HAND_UPDATE,
     BRISCOLA_UPDATE,
     PLAYER_STATE_UPDATE,
+    SETTED_BET,
+    PLAYED_CARD,
     TEXT_MESSAGE,
     END_ROUND,
     END_SET,

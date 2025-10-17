@@ -49,7 +49,6 @@ public class Game {
 
     public void distributeCards() {
         for(Player p : players) {
-            //TODO: nel for va messo set anzichè 10 che è messo per test
             //aggiungp #set carte per ogni giocatore
             for(int j = 0; j < set; j++)
                 p.addCardToHand(deck.getDeckcards().pop());
