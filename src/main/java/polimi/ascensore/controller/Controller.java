@@ -3,6 +3,7 @@ package polimi.ascensore.controller;
 import org.hibernate.sql.Update;
 import org.springframework.stereotype.Service;
 import polimi.ascensore.model.*;
+import polimi.ascensore.model.exception.CannotAddPlayerNowException;
 import polimi.ascensore.model.exception.InvalidCard;
 import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
 import polimi.ascensore.model.exception.PlayerNicknameAlreadyExistException;
@@ -72,8 +73,9 @@ public class Controller {
 
         List<String> playerNicknames = new LinkedList<>();
 
-        for(Player p : game.getPlayers()){
-            playerNicknames.add(p.getNickName());
+        //invio la lista dei giocatori connessi a tutti i client che sono anche in ordine per il primo turno
+        for(int i = 0; i < game.getTableCard().getPlayerListOrder().size(); i++){
+            playerNicknames.add(game.getTableCard().getPlayerListOrder().get(i).getNickName());
         }
 
         StartingGame startingGame = new StartingGame(playerNicknames);
@@ -93,7 +95,7 @@ public class Controller {
             notifyAllClients(initialStateUpdate, p.getNickName(), MessageType.PLAYER_STATE_UPDATE);
         }
 
-        Player firstPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn());
+        Player firstPlayer = game.getTableCard().getPlayerListOrder().get(0);
         firstPlayer.updateState(PlayerState.BET);
         PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET, firstPlayer.getNickName());
         notifyAllClients(playerStateUpdate, firstPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
@@ -129,6 +131,8 @@ public class Controller {
 
         }catch(PlayerNicknameAlreadyExistException e){
             System.out.println("Nickname already exists");
+        } catch (CannotAddPlayerNowException e) {
+            System.out.println("Cannot add player now, game already started");
         }
 
         loginResponse = new LoginResponse(isLogged, nickName, connectedPlayers);
@@ -243,18 +247,19 @@ public class Controller {
                     //FINE SET
                     //finiti tutti i round del set quindi si calcolano punteggi
                     updateScore();
+                    //aggiorna set, round e resetta numTurn, le carte giocate e le scommesse e le prese fatte
                     game.updateSet();
                     game.resetRound();
                     game.resetNumTurn();
                     game.getTableCard().resetPlayedCard();
                     resetBetAndRoundsWon();
+                    //aggiorna lista player order per il prossimo set
+                    Player nextPlayer = game.getPlayers().get((game.getSet()-1)%NUM_PLAYER);
+                    game.getTableCard().updatePlayerListOrder(nextPlayer);
+                    game.getTableCard().getPlayerListOrder().get(0).updateState(PlayerState.BET);
                     //aggiorna deck e distribuisce carte e briscola
                     game.getDeck().shuffleDeck();
                     game.distributeCards();
-                    //aggiorna lista player order per il prossimo set
-                    Player nextPlayer = game.getPlayers().get(game.getRound());
-                    game.getTableCard().updatePlayerListOrder(nextPlayer);
-                    game.getTableCard().getPlayerListOrder().get(0).updateState(PlayerState.BET);
                     //notifica client fine set con punteggi di tutto il set, vincitore round, nuovo playerListOrder e nuovo state per next player
                     HashMap<String, Integer> nextPlayerOrderAndScore = new HashMap<>();
                     for(Player p : game.getTableCard().getPlayerListOrder()){

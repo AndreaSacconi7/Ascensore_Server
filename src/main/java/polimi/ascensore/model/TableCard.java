@@ -14,6 +14,8 @@ public class TableCard {
 
     private List<Player> playerListOrder;
 
+    //private Player currentFirstPlayerBetting;
+
     public TableCard() {
         this.playedCards = new LinkedList<>();
         this.winnerPlayer = null;
@@ -24,20 +26,19 @@ public class TableCard {
     public void updatePlayerListOrder(Player winnerPlayer) {
         List<Player> newPlayerListOrder = new ArrayList<>();
         for(int i = 0; i < playerListOrder.size(); i++){
-            if(playerListOrder.get(i).equals(winnerPlayer)){
+            if(playerListOrder.get(i).getNickName().equals(winnerPlayer.getNickName())) {
                 //trovato winnerPlayer
-                for(int j = i + 1; j < playerListOrder.size(); j++){
+                for (int j = i; j < playerListOrder.size(); j++) {
                     //aggiungo i player che seguono il winnerPlayer
                     newPlayerListOrder.add(playerListOrder.get(j));
                 }
-                //infine aggiungo il winnerPlayer così si ha l'ordine corretto
-                newPlayerListOrder.add(playerListOrder.get(i));
+                for (int j = 0; j < i; j++) {
+                    //aggiungo i player che precedono il winnerPlayer
+                    newPlayerListOrder.add(playerListOrder.get(j));
+                }
                 //aggiorno la lista di player con il nuovo ordine
                 setPlayerListOrder(newPlayerListOrder);
                 return;
-            }else{
-                //aggiungo i player che precedono il winnerPlayer
-                newPlayerListOrder.add(playerListOrder.get(i));
             }
         }
     }
@@ -50,6 +51,22 @@ public class TableCard {
     public void updatePlayerRoundsWon(){
         winnerPlayer.updateRoundsWon();
     }
+
+    /*public void setCurrentFirstPlayerBetting(){
+        for(int i = 0; i < playerListOrder.size(); i++){
+            if(playerListOrder.get(i).equals(winnerPlayer)){
+                if(i != playerListOrder.size() - 1){
+                    currentFirstPlayerBetting = playerListOrder.get(i + 1);
+                } else {
+                    currentFirstPlayerBetting = playerListOrder.get(0);
+                }
+            }
+        }
+    }
+
+    public Player getCurrentFirstPlayerBetting() {
+        return currentFirstPlayerBetting;
+    }*/
 
     public void putCard(Card card){
         playedCards.push(card);

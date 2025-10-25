@@ -1,5 +1,6 @@
 package polimi.ascensore.model;
 
+import polimi.ascensore.model.exception.CannotAddPlayerNowException;
 import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
 import polimi.ascensore.model.exception.PlayerNicknameAlreadyExistException;
 
@@ -60,10 +61,12 @@ public class Game {
             tableCard.setBriscola(null);
     }
 
-    public void addPlayer(String nickName) throws PlayerNicknameAlreadyExistException {
+    public void addPlayer(String nickName) throws PlayerNicknameAlreadyExistException, CannotAddPlayerNowException {
         for( Player p : players) {
             if(p.getNickName().equals(nickName))
                 throw new PlayerNicknameAlreadyExistException();
+            if(p.getPlayerState() != PlayerState.IDLE)
+                throw new CannotAddPlayerNowException();
         }
         Player player = new Player(nickName);
         players.add(player);
