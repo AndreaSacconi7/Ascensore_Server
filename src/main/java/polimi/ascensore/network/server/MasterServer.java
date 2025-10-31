@@ -81,4 +81,8 @@ public class MasterServer {
     public void setSocketHandler(MySocketHandler socketHandler) {
         controller.setSocketHandler(socketHandler);
     }
+
+    public void fetchPlayerInfo(String token) {
+        controller.fetchPlayerInfo(token);
+    }
 }

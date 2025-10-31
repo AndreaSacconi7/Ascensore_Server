@@ -409,6 +409,10 @@ public class Controller {
         }
     }
 
+    public void fetchPlayerInfo(String token) {
+        //TODO: implementare
+    }
+
     /*public void addClientHandler(MySocketHandler clientHandler) {
         synchronized (gameNotifications) {
             gameNotifications.add(clientHandler);

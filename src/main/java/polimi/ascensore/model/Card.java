@@ -18,6 +18,13 @@ public class Card implements Serializable {
     }
 
     public int getValue() {
+        //nel caso di carte speciali (asso e tre) restituisco il valore più alto rispetto al re (10)
+        if(value == 1){
+            return 12;
+        } else if (value == 3) {
+            return 11;
+        }
+        //tutte carte tranne asso e tre
         return value;
     }
 }
