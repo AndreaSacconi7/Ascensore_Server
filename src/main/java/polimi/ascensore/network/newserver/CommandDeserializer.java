@@ -22,8 +22,10 @@ public class CommandDeserializer implements JsonDeserializer<Command> {
             executable = context.deserialize(jsonObject.get("executable"), SetBet.class);
         } else if ("PUT_CARD".equals(commandType)) {
             executable = context.deserialize(jsonObject.get("executable"), PutCard.class);
-        }else if("PLAYER_INFO_REQUEST".equals(commandType)){
+        }else if("PLAYER_INFO_REQUEST".equals(commandType)) {
             executable = context.deserialize(jsonObject.get("executable"), PlayerInfoRequest.class);
+        }else if("JOIN_GAME_REQUEST".equals(commandType)) {
+            executable = context.deserialize(jsonObject.get("executable"), JoinGameRequest.class);
         } else{
             //comando sconosciuto
             throw new JsonParseException("Unknown command type: " + commandType);

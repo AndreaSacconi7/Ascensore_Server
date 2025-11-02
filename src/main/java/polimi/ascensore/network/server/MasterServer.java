@@ -1,7 +1,8 @@
 package polimi.ascensore.network.server;
 
 import org.springframework.stereotype.Service;
-import polimi.ascensore.controller.Controller;
+import polimi.ascensore.controller.GameController;
+import polimi.ascensore.controller.MasterController;
 import polimi.ascensore.model.Seed;
 import polimi.ascensore.network.command.Command;
 import polimi.ascensore.network.command.ExecutableInServer;
@@ -14,15 +15,19 @@ import java.util.Queue;
 @Service
 public class MasterServer {
 
-    private final Controller controller;
+    private final MasterController masterController;
+
+    //private final GameController gameController;
 
     private final Object lockCommand = new Object();
 
     private Queue<Command> commandList;
 
-    public MasterServer(Controller controller) {
+    //TODO: conviene far si che questa rimanga come unico server che smista i comandi ai vari game controller. e in ognuno di essi pongo una coda che gli esegue
+    public MasterServer(MasterController masterController) {
         System.out.println("MasterServer created");
-        this.controller = controller;
+        //this.gameController = gameController;
+        this.masterController = masterController;
         this.commandList = new LinkedList<>();
 
         new Thread(() -> {
@@ -58,11 +63,11 @@ public class MasterServer {
     }
 
     public void putCard(Seed seed, int value, String nickName) {
-        controller.putCard(seed, value, nickName);
+        masterController.putCard(seed, value, nickName);
     }
 
     public void setBet(int bet, String nickName) {
-        controller.setBet(bet, nickName);
+        masterController.setBet(bet, nickName);
     }
 
     public void executeExecutable(ExecutableInServer executable) {
@@ -75,14 +80,18 @@ public class MasterServer {
     public void addClient(String nickName, String password, String clientSessionId) {
 
         //controller.addClientHandler(clientHandler);
-        controller.addPlayer(nickName, clientSessionId);
+        masterController.loginPlayer(nickName, clientSessionId);
     }
 
     public void setSocketHandler(MySocketHandler socketHandler) {
-        controller.setSocketHandler(socketHandler);
+        masterController.setSocketHandler(socketHandler);
     }
 
     public void fetchPlayerInfo(String token) {
-        controller.fetchPlayerInfo(token);
+        masterController.fetchPlayerInfo(token);
+    }
+
+    public void joinGame(String nickname) {
+        masterController.addPlayerToGame(nickname);
     }
 }

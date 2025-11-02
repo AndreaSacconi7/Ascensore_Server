@@ -8,6 +8,8 @@ public enum CommandType {
     LOGIN_COMMAND,
     //comando di richiesta informazioni del giocatore
     PLAYER_INFO_REQUEST,
+    //comando di richiesta di unirsi ad una partita
+    JOIN_GAME_REQUEST,
     //comando di ping inviato dal client per verificare la connessione con il server
     PING_COMMAND,
     //comando inviato dal client per posizionare una carta sul tavolo

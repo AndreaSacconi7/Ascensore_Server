@@ -17,7 +17,14 @@ public class Card implements Serializable {
         return seed;
     }
 
+    //ritorna il valore numerico della carta
     public int getValue() {
+
+        return value;
+    }
+
+    //metodo usato per confrontare le carte tenendo conto del fatto che l'asso e il tre hanno un valore più alto del re
+    public int getValueForComparison() {
         //nel caso di carte speciali (asso e tre) restituisco il valore più alto rispetto al re (10)
         if(value == 1){
             return 12;

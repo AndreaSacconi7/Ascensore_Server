@@ -61,10 +61,8 @@ public class Game {
             tableCard.setBriscola(null);
     }
 
-    public void addPlayer(String nickName) throws PlayerNicknameAlreadyExistException, CannotAddPlayerNowException {
+    public void addPlayer(String nickName) throws CannotAddPlayerNowException {
         for( Player p : players) {
-            if(p.getNickName().equals(nickName))
-                throw new PlayerNicknameAlreadyExistException();
             if(p.getPlayerState() != PlayerState.IDLE)
                 throw new CannotAddPlayerNowException();
         }

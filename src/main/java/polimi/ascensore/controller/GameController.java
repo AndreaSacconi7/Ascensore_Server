@@ -1,6 +1,5 @@
 package polimi.ascensore.controller;
 
-import org.hibernate.sql.Update;
 import org.springframework.stereotype.Service;
 import polimi.ascensore.model.*;
 import polimi.ascensore.model.exception.CannotAddPlayerNowException;
@@ -18,13 +17,13 @@ import java.util.List;
 import static polimi.ascensore.model.Game.NUM_PLAYER;
 
 @Service
-public class Controller {
+public class GameController {
 
     private final Game game;
 
     private MySocketHandler gameNotifications;
 
-    public Controller() {
+    public GameController() {
 
         game = new Game();
         this.gameNotifications = null;
@@ -114,37 +113,14 @@ public class Controller {
         notifyAllClients(briscolaUpdate, "", MessageType.BRISCOLA_UPDATE);
     }
 
-    public void addPlayer(String nickName, String clientSessionId) {
+    public void addPlayerToGame(String nickname) throws CannotAddPlayerNowException {
 
-        LinkedList<String> connectedPlayers = new LinkedList<>();
-        boolean isLogged = false;
-        LoginResponse loginResponse;
-
-        for(Player p: game.getPlayers()){
-            connectedPlayers.add(p.getNickName());
-        }
-
-        try{
-            game.addPlayer(nickName);
-            isLogged = true;
-            gameNotifications.addNicknameToSessionIdNode(nickName, clientSessionId);
-
-        }catch(PlayerNicknameAlreadyExistException e){
-            System.out.println("Nickname already exists");
-        } catch (CannotAddPlayerNowException e) {
-            System.out.println("Cannot add player now, game already started");
-        }
-
-        loginResponse = new LoginResponse(isLogged, nickName, connectedPlayers);
-
-        notifyAllClients(loginResponse, nickName, MessageType.LOGIN_RESPONSE);
-
-        //controllo condizione di inizio partita
-        if(game.getPlayers().size() == NUM_PLAYER){
-            startGame();
-        }
+        game.addPlayer(nickname);
     }
 
+    public int getNumPlayersInGame() {
+        return game.getPlayers().size();
+    }
 
     public void putCard(Seed seed, int value, String nickName) {
 
@@ -169,7 +145,7 @@ public class Controller {
             }
             if(card == null){
                 //notifica client carta non valida
-                TextMessage error = new TextMessage("Invalid card played by " + nickName);
+                TextMessage error = new TextMessage("Invalid card played by " + nickName + ". He does not have this card in hand");
                 notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
                 return;
             }
@@ -374,7 +350,7 @@ public class Controller {
         }
 
         if (card1.getSeed() == card2.getSeed()) {
-            if (card1.getValue() > card2.getValue()) {
+            if (card1.getValueForComparison() > card2.getValueForComparison()) {
                 //card1 vince
                 return true;
             } else {
@@ -407,10 +383,6 @@ public class Controller {
             p.resetBet();
             p.resetRoundsWon();
         }
-    }
-
-    public void fetchPlayerInfo(String token) {
-        //TODO: implementare
     }
 
     /*public void addClientHandler(MySocketHandler clientHandler) {
