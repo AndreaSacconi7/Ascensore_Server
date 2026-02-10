@@ -55,7 +55,7 @@ public class Game {
                 p.addCardToHand(deck.getDeckcards().pop());
         }
         //aggiungo la briscola tranne nel set 10
-        if(!deck.getDeckcards().isEmpty())
+        if(!deck.getDeckcards().isEmpty() && set != 10)
             tableCard.setBriscola(deck.getDeckcards().pop());
         else
             tableCard.setBriscola(null);
@@ -88,6 +88,15 @@ public class Game {
 
     public void updateRound() {
         this.round++;
+
+        resetBriscolaInSet10();
+    }
+
+    //nel turno dieci la briscola è la prima carta giocata. quindi quando finisco il round la tolgo
+    private void resetBriscolaInSet10(){
+        if(getSet() == 10){
+            getTableCard().setBriscola(null);
+        }
     }
 
     public void resetRound(){

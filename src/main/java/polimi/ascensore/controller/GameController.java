@@ -251,7 +251,7 @@ public class GameController {
                     notifyAllClients(playerStateUpdate, nextPlayerNickName, MessageType.PLAYER_STATE_UPDATE);
                 }else{
                     //FINE ROUND
-                    //aggiorno playerList per il prossimo round (devo cambiare l'ordine di gioco del player)
+                    //aggiorno playerList per il prossimo round (devo cambiare l'ordine di gioco dei player)
                     game.updateRound();
                     game.updateNumTurn();
                     //game.resetNumTurn();
@@ -326,6 +326,9 @@ public class GameController {
 
     private boolean checkIfValidCard(Card card, Player player) {
         if(game.getTableCard().getPlayedCards().isEmpty()){
+            if(game.getSet() == 10)
+                //se è la prima carta del set 10 allora diventa la briscola per questo round
+                game.getTableCard().setBriscola(card);
             return true;
         }else if(card.getSeed() == game.getTableCard().getPlayedCards().get(0).getSeed()){
             //se la carta giocata ha lo stesso seed della prima carta giocata allora è valida sicuro
