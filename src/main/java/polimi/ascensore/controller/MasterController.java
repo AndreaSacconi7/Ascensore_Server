@@ -1,17 +1,24 @@
 package polimi.ascensore.controller;
 
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import org.springframework.stereotype.Service;
+import org.springframework.web.socket.WebSocketSession;
+import polimi.ascensore.JPA.Player;
 import polimi.ascensore.model.Lobby;
-import polimi.ascensore.model.Player;
+import polimi.ascensore.model.GamePlayer;
 import polimi.ascensore.model.Seed;
 import polimi.ascensore.model.exception.CannotAddPlayerNowException;
 import polimi.ascensore.model.exception.PlayerNicknameAlreadyExistException;
 import polimi.ascensore.network.message.*;
 import polimi.ascensore.network.newserver.MySocketHandler;
+import polimi.ascensore.network.newserver.PlayerRepository;
+import polimi.ascensore.network.newserver.SupabaseAuthService;
 
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 
 import static polimi.ascensore.model.Game.NUM_PLAYER;
 
@@ -26,6 +33,11 @@ public class MasterController {
 
     private HashMap<String, GameController> playerGameMap; //mappa nickname giocatore -> id partita
 
+    @Autowired
+    private SupabaseAuthService authService; // Il servizio che hai creato
+    @Autowired
+    private PlayerRepository playerRepository; // Il repository JPA
+
     public MasterController() {
         lobby = new Lobby();
         notStartedGameControllersList = new LinkedList<>();
@@ -34,42 +46,82 @@ public class MasterController {
 
     //TODO: quando si sposterà il login su supabase, il primo messaggio scambiato
     // con il server java sarà fetcnhPlayerInfo quindi dovro porre lì il clientSessionId
-    public void loginPlayer(String nickName, String clientSessionId) {
+    public Player loginPlayer(String nickName, String clientSessionId, String supabaseId) {
 
         LinkedList<String> connectedPlayers = new LinkedList<>();
         boolean isLogged = false;
         LoginResponse loginResponse;
-        /*
-        for(Player p: game.getPlayers()){
-            connectedPlayers.add(p.getNickName());
-        }*/
 
+        Player player = null;
         try{
             lobby.checkIfValidLogin(nickName);
-            lobby.addPlayerToLobby(nickName);
+            player = lobby.addPlayerToLobby(nickName, supabaseId);
             isLogged = true;
             gameNotifications.addNicknameToSessionIdNode(nickName, clientSessionId);
+            playerRepository.save(player); // Salviamo l'associazione per il futuro
 
         } catch (PlayerNicknameAlreadyExistException e) {
             System.out.println("Nickname already exists");
         }
-
+        /*
         loginResponse = new LoginResponse(isLogged, nickName, connectedPlayers);
 
-        notifySingleClient(loginResponse, nickName, MessageType.LOGIN_RESPONSE);
-
-        //controllo condizione di inizio partita
-        /*if(game.getPlayers().size() == NUM_PLAYER){
-            startGame();
-        }*/
+        //notifySingleClient(loginResponse, nickName, MessageType.LOGIN_RESPONSE);
+        notifyClient(loginResponse, clientSessionId, MessageType.LOGIN_RESPONSE);
+        */
+        return player;
     }
 
-    public void fetchPlayerInfo(String token) {
-        //TODO: implementare
-        //gameNotifications.addNicknameToSessionIdNode(nickName, clientSessionId);
+    public void fetchPlayerInfo(String sessionId, String token, String nicknameOpzionale) {
+
+        // 1. Estrai l'ID univoco dal token (garantito da Supabase)
+        String supabaseUid = authService.validateAndGetUserId(token);
+
+        if (supabaseUid == null) {
+            //gameNotifications.closeSession(sessionId); // Token non valido
+            return;
+        }
+
+        // 2. Cerchi nel DB se esiste già
+        Optional<Player> playerOpt = playerRepository.findBySupabaseUid(supabaseUid);
+
+        Player player;
+
+        if (playerOpt.isPresent()) {
+            // --- CASO A: AUTO-LOGIN (Utente già registrato) ---
+            // NON ci serve il nickname dal client, usiamo quello che abbiamo nel DB!
+            player = playerOpt.get();
+            System.out.println("Bentornato " + player.getNickname());
+
+        } else {
+            // --- CASO B: PRIMO ACCESSO ASSOLUTO (Nuovo Utente) ---
+            player = loginPlayer(nicknameOpzionale, sessionId, supabaseUid); // Questo metodo si occuperà di creare il Player e salvarlo nel DB
+        }
+
+        if(player != null) {
+            System.out.println("Nuovo utente creato");
+            // 3. Salva nella sessione
+            gameNotifications.getSession(sessionId).getAttributes().put("PLAYER", player);
+
+            PlayerInfoResponse response = new PlayerInfoResponse(player.getNickname(), true);
+            Message message = new Message(response, MessageType.PLAYER_INFO_RESPONSE);
+
+            System.out.println("Player info fetched for " + player.getNickname() + ", sending response...");
+            // 5. Rispondi al client
+            gameNotifications.sendMessageToClient(message, sessionId);
+        }else{
+            System.out.println("Errore nel login, player è null");
+
+            PlayerInfoResponse response = new PlayerInfoResponse(player.getNickname(), false);
+            Message message = new Message(response, MessageType.PLAYER_INFO_RESPONSE);
+
+            gameNotifications.sendMessageToClient(message, sessionId);
+        }
     }
 
-    public void addPlayerToGame(String nickname){
+    public void addPlayerToGame(String sessionId){
+        Player player = getPlayerBySession(sessionId);
+
         JoinGameResponse joinGameResponse;
         boolean isJoined = false;
         if(notStartedGameControllersList.isEmpty()){
@@ -80,15 +132,16 @@ public class MasterController {
         }
         for(GameController gc : notStartedGameControllersList){
             try {
-                gc.addPlayerToGame(nickname);
+                gc.addPlayerToGame(player);
                 isJoined = true;
-                System.out.println("Player " + nickname + " added to game controller");
+                System.out.println("Player " + player.getNickname() + " added to game controller");
                 //TODO: potrei spostare il player dalla lobby a dentro il game. poi quando finisce la partita lo tiro fuori e lo rimetto in lobby
                 //associo il giocatore alla partita
-                playerGameMap.put(nickname, gc);
+                playerGameMap.put(player.getNickname(), gc);
 
-                joinGameResponse = new JoinGameResponse(isJoined, nickname);
-                notifySingleClient(joinGameResponse, nickname, MessageType.JOIN_GAME_RESPONSE);
+                joinGameResponse = new JoinGameResponse(isJoined, player.getNickname());
+                //notifySingleClient(joinGameResponse, player, MessageType.JOIN_GAME_RESPONSE);
+                notifyClient(joinGameResponse, sessionId, MessageType.JOIN_GAME_RESPONSE);
 
                 if(gc.getNumPlayersInGame() == NUM_PLAYER){
                     //partita piena, la rimuovo dalla lista di quelle non ancora iniziate
@@ -102,20 +155,27 @@ public class MasterController {
                 System.out.println("Game already started in this controller, trying next game controller -----------------------------------------------------!!!");
                 notStartedGameControllersList.remove(gc);
 
-                joinGameResponse = new JoinGameResponse(isJoined, nickname);
-                notifySingleClient(joinGameResponse, nickname, MessageType.JOIN_GAME_RESPONSE);
+                joinGameResponse = new JoinGameResponse(isJoined, player.getNickname());
+                //notifySingleClient(joinGameResponse, player.getNickname(), nickname, MessageType.JOIN_GAME_RESPONSE);
+                notifyClient(joinGameResponse, sessionId, MessageType.JOIN_GAME_RESPONSE);
             }
         }
     }
 
-    public void putCard(Seed seed, int value, String nickName) {
-        GameController gameController = playerGameMap.get(nickName);
-        gameController.putCard(seed, value, nickName);
+    public void putCard(Seed seed, int value, String sessionId) {
+        Player player = getPlayerBySession(sessionId);
+        String nickname = player.getNickname();
+
+        GameController gameController = playerGameMap.get(nickname);
+        gameController.putCard(seed, value, nickname);
     }
 
-    public void setBet(int bet, String nickName) {
-        GameController gameController = playerGameMap.get(nickName);
-        gameController.setBet(bet, nickName);
+    public void setBet(int bet, String sessionId) {
+        Player player = getPlayerBySession(sessionId);
+        String nickname = player.getNickname();
+
+        GameController gameController = playerGameMap.get(nickname);
+        gameController.setBet(bet, nickname);
     }
 
 
@@ -126,11 +186,29 @@ public class MasterController {
 
     public void notifySingleClient(ExecutableInClient executable, String nickname, MessageType messageType) {
 
-        Message message = new Message(executable, nickname, messageType);
+        Message message = new Message(executable, messageType);
         synchronized (gameNotifications) {
 
             //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
             gameNotifications.forwardUpdateToSingleClient(message, nickname);
         }
+    }
+
+    public void notifyClient(ExecutableInClient executable, String sessionId, MessageType messageType) {
+
+        Message message = new Message(executable, messageType);
+        synchronized (gameNotifications) {
+
+            //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
+            gameNotifications.sendMessageToClient(message, sessionId);
+        }
+    }
+
+    public Player getPlayerBySession(String sessionId) {
+        WebSocketSession session = gameNotifications.getSession(sessionId);
+        if (session != null) {
+            return (Player) session.getAttributes().get("PLAYER");
+        }
+        return null; // O lancia un'eccezione se preferisci
     }
 }

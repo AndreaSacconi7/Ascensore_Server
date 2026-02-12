@@ -1,5 +1,6 @@
 package polimi.ascensore.model;
 
+import polimi.ascensore.JPA.Player;
 import polimi.ascensore.model.exception.PlayerNicknameAlreadyExistException;
 
 import java.util.HashMap;
@@ -12,8 +13,10 @@ public class Lobby {
         onlinePlayers = new HashMap<>();
     }
 
-    public void addPlayerToLobby(String nickname) {
-        onlinePlayers.put(nickname, new Player(nickname));
+    public Player addPlayerToLobby(String nickname, String supabaseId) {
+        Player player = new Player(supabaseId, nickname);
+        onlinePlayers.put(nickname, player);
+        return player;
     }
 
     public Player getPlayerByNickname(String nickname) {

@@ -8,6 +8,7 @@ public class PutCard implements ExecutableInServer{
     private final Seed seed;
     private final int value;
     private final String nickname;
+    String clientSessionId;
 
     public PutCard(Seed seed, int value, String nickname) {
         this.seed = seed;
@@ -17,11 +18,11 @@ public class PutCard implements ExecutableInServer{
 
     @Override
     public void execute(MasterServer masterServer) {
-        masterServer.putCard(seed, value, nickname);
+        masterServer.putCard(seed, value, clientSessionId);
     }
 
     @Override
     public void setClientSessionId(String clientSessionId) {
-
+        this.clientSessionId = clientSessionId;
     }
 }

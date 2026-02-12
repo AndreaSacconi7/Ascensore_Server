@@ -1,13 +1,14 @@
 package polimi.ascensore.model;
 
+import polimi.ascensore.JPA.Player;
 import polimi.ascensore.model.exception.InvalidCard;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class Player {
+public class GamePlayer {
 
-    private final String nickName;
+    private String nickname;
 
     private int score;
 
@@ -19,9 +20,16 @@ public class Player {
 
     private PlayerState playerState;
 
+    public GamePlayer(Player player){
+        this.nickname = player.getNickname();
+        this.score = 0;
+        this.bet = 0;
+        this.hand = new ArrayList<>();
+        this.playerState = PlayerState.IDLE;
+    }
 
-    public Player(String nickName) {
-        this.nickName = nickName;
+    public GamePlayer(String nickname) {
+        this.nickname = nickname;
         this.score = 0;
         this.bet = 0;
         this.hand = new ArrayList<>();
@@ -71,8 +79,8 @@ public class Player {
         this.bet = 0;
     }
 
-    public String getNickName() {
-        return nickName;
+    public String getNickname() {
+        return nickname;
     }
 
     public int getScore() {
@@ -97,5 +105,9 @@ public class Player {
 
     public PlayerState getPlayerState() {
         return playerState;
+    }
+
+    public String getUsername() {
+        return nickname;
     }
 }

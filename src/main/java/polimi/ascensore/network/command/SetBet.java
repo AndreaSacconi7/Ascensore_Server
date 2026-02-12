@@ -6,6 +6,7 @@ public class SetBet implements ExecutableInServer{
 
     private final int bet;
     private final String nickname;
+    String clientSessionId;
 
     public SetBet(int bet, String nickname) {
         this.bet = bet;
@@ -14,11 +15,11 @@ public class SetBet implements ExecutableInServer{
 
     @Override
     public void execute(MasterServer masterServer) {
-        masterServer.setBet(bet, nickname);
+        masterServer.setBet(bet, clientSessionId);
     }
 
     @Override
     public void setClientSessionId(String clientSessionId) {
-
+        this.clientSessionId = clientSessionId;
     }
 }

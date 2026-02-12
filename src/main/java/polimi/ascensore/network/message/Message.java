@@ -8,12 +8,6 @@ public class Message implements Serializable {
 
     private ExecutableInClient executable;
 
-    //nickname del player che è di turno
-    /**
-     * Represents the nickname of the player that is playing.
-     */
-    private String nickname;
-
     private MessageType messageType;
     //tale costruttore pone i messaggi direttamente a tipo COMMON_MESSAGE
 
@@ -21,11 +15,9 @@ public class Message implements Serializable {
      * Creates a message with the specified executable and nickname.
      * Sets messages directly to type COMMON_MESSAGE
      * @param executable the executable with the response to the client
-     * @param nickname the player who receives the message
      */
-    public Message(ExecutableInClient executable, String nickname, MessageType messageType){
+    public Message(ExecutableInClient executable, MessageType messageType){
         this.executable = executable;
-        this.nickname = nickname;
         this.messageType = messageType;
     }
 
@@ -34,13 +26,6 @@ public class Message implements Serializable {
      */
     public ExecutableInClient getExecutable(){
         return this.executable;
-    }
-
-    /**
-     * @return the nickname of the player that is playing
-     */
-    public String getNickname(){
-        return this.nickname;
     }
 
     // Convert the object to JSON

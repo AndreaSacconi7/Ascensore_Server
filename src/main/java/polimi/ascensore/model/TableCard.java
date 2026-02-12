@@ -7,12 +7,12 @@ public class TableCard {
 
     private LinkedList<Card> playedCards;
 
-    private Player winnerPlayer;
+    private GamePlayer winnerPlayer;
 
     private Card briscola;
     //lista che determina l'ordine di gioco dei player
 
-    private List<Player> playerListOrder;
+    private List<GamePlayer> playerListOrder;
 
     //private Player currentFirstPlayerBetting;
 
@@ -23,10 +23,10 @@ public class TableCard {
         this.playerListOrder = new ArrayList<>();
     }
 
-    public void updatePlayerListOrder(Player winnerPlayer) {
-        List<Player> newPlayerListOrder = new ArrayList<>();
+    public void updatePlayerListOrder(GamePlayer winnerPlayer) {
+        List<GamePlayer> newPlayerListOrder = new ArrayList<>();
         for(int i = 0; i < playerListOrder.size(); i++){
-            if(playerListOrder.get(i).getNickName().equals(winnerPlayer.getNickName())) {
+            if(playerListOrder.get(i).getNickname().equals(winnerPlayer.getNickname())) {
                 //trovato winnerPlayer
                 for (int j = i; j < playerListOrder.size(); j++) {
                     //aggiungo i player che seguono il winnerPlayer
@@ -43,7 +43,7 @@ public class TableCard {
         }
     }
 
-    public void updateWinnerPlayer(Player player) {
+    public void updateWinnerPlayer(GamePlayer player) {
         winnerPlayer = player;
     }
 
@@ -80,7 +80,7 @@ public class TableCard {
         return playedCards;
     }
 
-    public Player getWinnerPlayer() {
+    public GamePlayer getWinnerPlayer() {
         return winnerPlayer;
     }
 
@@ -92,11 +92,11 @@ public class TableCard {
         this.briscola = briscola;
     }
 
-    public List<Player> getPlayerListOrder() {
+    public List<GamePlayer> getPlayerListOrder() {
         return playerListOrder;
     }
 
-    public void setPlayerListOrder(List<Player> playerListOrder) {
+    public void setPlayerListOrder(List<GamePlayer> playerListOrder) {
         this.playerListOrder = playerListOrder;
     }
 

@@ -1,7 +1,6 @@
 package polimi.ascensore.network.server;
 
 import org.springframework.stereotype.Service;
-import polimi.ascensore.controller.GameController;
 import polimi.ascensore.controller.MasterController;
 import polimi.ascensore.model.Seed;
 import polimi.ascensore.network.command.Command;
@@ -62,12 +61,12 @@ public class MasterServer {
         }
     }
 
-    public void putCard(Seed seed, int value, String nickName) {
-        masterController.putCard(seed, value, nickName);
+    public void putCard(Seed seed, int value, String sessionId) {
+        masterController.putCard(seed, value, sessionId);
     }
 
-    public void setBet(int bet, String nickName) {
-        masterController.setBet(bet, nickName);
+    public void setBet(int bet, String sessionId) {
+        masterController.setBet(bet, sessionId);
     }
 
     public void executeExecutable(ExecutableInServer executable) {
@@ -77,21 +76,22 @@ public class MasterServer {
         }
     }
 
+    //TODO: in disuso dopo introduzione di Supabase
     public void addClient(String nickName, String password, String clientSessionId) {
 
         //controller.addClientHandler(clientHandler);
-        masterController.loginPlayer(nickName, clientSessionId);
+        //masterController.loginPlayer(nickName, clientSessionId);
     }
 
     public void setSocketHandler(MySocketHandler socketHandler) {
         masterController.setSocketHandler(socketHandler);
     }
 
-    public void fetchPlayerInfo(String token) {
-        masterController.fetchPlayerInfo(token);
+    public void fetchPlayerInfo(String sessionId, String token, String nickname) {
+        masterController.fetchPlayerInfo(sessionId, token, nickname);
     }
 
-    public void joinGame(String nickname) {
-        masterController.addPlayerToGame(nickname);
+    public void joinGame(String sessionId) {
+        masterController.addPlayerToGame(sessionId);
     }
 }

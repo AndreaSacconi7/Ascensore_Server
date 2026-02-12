@@ -1,8 +1,8 @@
 package polimi.ascensore.model;
 
+import polimi.ascensore.JPA.Player;
 import polimi.ascensore.model.exception.CannotAddPlayerNowException;
 import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
-import polimi.ascensore.model.exception.PlayerNicknameAlreadyExistException;
 
 import java.io.FileNotFoundException;
 import java.util.ArrayList;
@@ -21,7 +21,7 @@ public class Game {
 
     public static final int NUM_PLAYER = 2;
 
-    List<Player> players;
+    List<GamePlayer> players;
     //Round indica la partita (per gestire carte e scommesse)
     //numTurn indica il turno di gioco (per gestire le azioni dei giocatori)
     private int set;
@@ -49,7 +49,7 @@ public class Game {
     }
 
     public void distributeCards() {
-        for(Player p : players) {
+        for(GamePlayer p : players) {
             //aggiungp #set carte per ogni giocatore
             for(int j = 0; j < set; j++)
                 p.addCardToHand(deck.getDeckcards().pop());
@@ -61,13 +61,13 @@ public class Game {
             tableCard.setBriscola(null);
     }
 
-    public void addPlayer(String nickName) throws CannotAddPlayerNowException {
-        for( Player p : players) {
+    public void addPlayer(Player player) throws CannotAddPlayerNowException {
+        for( GamePlayer p : players) {
             if(p.getPlayerState() != PlayerState.IDLE)
                 throw new CannotAddPlayerNowException();
         }
-        Player player = new Player(nickName);
-        players.add(player);
+        GamePlayer gamePlayer = new GamePlayer(player);
+        players.add(gamePlayer);
     }
 
     public void updateSet() {
@@ -111,9 +111,9 @@ public class Game {
         this.numTurn = 0;
     }
 
-    public Player getPlayerByNickName(String nickname) throws PlayerNickNameDoesNotExist {
-        for(Player p : players) {
-            if(p.getNickName().equals(nickname)) {
+    public GamePlayer getPlayerByNickName(String nickname) throws PlayerNickNameDoesNotExist {
+        for(GamePlayer p : players) {
+            if(p.getNickname().equals(nickname)) {
                 return p;
             }
         }
@@ -140,7 +140,7 @@ public class Game {
         return tableCard;
     }
 
-    public List<Player> getPlayers() {
+    public List<GamePlayer> getPlayers() {
         return players;
     }
 

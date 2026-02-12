@@ -1,11 +1,11 @@
 package polimi.ascensore.controller;
 
 import org.springframework.stereotype.Service;
+import polimi.ascensore.JPA.Player;
 import polimi.ascensore.model.*;
 import polimi.ascensore.model.exception.CannotAddPlayerNowException;
 import polimi.ascensore.model.exception.InvalidCard;
 import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
-import polimi.ascensore.model.exception.PlayerNicknameAlreadyExistException;
 import polimi.ascensore.network.message.*;
 import polimi.ascensore.network.newserver.MySocketHandler;
 
@@ -36,7 +36,7 @@ public class GameController {
 
     public void notifyAllClients(ExecutableInClient executable, String nickname, MessageType messageType) {
 
-        Message message = new Message(executable, nickname, messageType);
+        Message message = new Message(executable, messageType);
         synchronized (gameNotifications) {
 
             //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
@@ -46,7 +46,7 @@ public class GameController {
 
     public void notifySingleClient(ExecutableInClient executable, String nickname, MessageType messageType) {
 
-        Message message = new Message(executable, nickname, messageType);
+        Message message = new Message(executable, messageType);
         synchronized (gameNotifications) {
 
             //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
@@ -74,7 +74,7 @@ public class GameController {
 
         //invio la lista dei giocatori connessi a tutti i client che sono anche in ordine per il primo turno
         for(int i = 0; i < game.getTableCard().getPlayerListOrder().size(); i++){
-            playerNicknames.add(game.getTableCard().getPlayerListOrder().get(i).getNickName());
+            playerNicknames.add(game.getTableCard().getPlayerListOrder().get(i).getNickname());
         }
 
         StartingGame startingGame = new StartingGame(playerNicknames);
@@ -88,24 +88,24 @@ public class GameController {
         firstPlayer.updateState(PlayerState.BET);
         TurnUpdate turnUpdate = new TurnUpdate(firstPlayer.getNickName(), PlayerState.BET);
         notifyAllClients(turnUpdate, firstPlayer.getNickName(), MessageType.TURN_UPDATE);*/
-        for(Player p : game.getPlayers()){
+        for(GamePlayer p : game.getPlayers()){
             p.updateState(PlayerState.WAIT);
-            PlayerStateUpdate initialStateUpdate = new PlayerStateUpdate(PlayerState.WAIT, p.getNickName());
-            notifyAllClients(initialStateUpdate, p.getNickName(), MessageType.PLAYER_STATE_UPDATE);
+            PlayerStateUpdate initialStateUpdate = new PlayerStateUpdate(PlayerState.WAIT, p.getNickname());
+            notifyAllClients(initialStateUpdate, p.getNickname(), MessageType.PLAYER_STATE_UPDATE);
         }
 
-        Player firstPlayer = game.getTableCard().getPlayerListOrder().get(0);
+        GamePlayer firstPlayer = game.getTableCard().getPlayerListOrder().get(0);
         firstPlayer.updateState(PlayerState.BET);
-        PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET, firstPlayer.getNickName());
-        notifyAllClients(playerStateUpdate, firstPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
+        PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET, firstPlayer.getNickname());
+        notifyAllClients(playerStateUpdate, firstPlayer.getNickname(), MessageType.PLAYER_STATE_UPDATE);
     }
 
     private void notifyDistributedCards(){
-        for(Player p : game.getPlayers()){
+        for(GamePlayer p : game.getPlayers()){
             //notifico a ogni player le sue carte in mano
             List<Card> handCard = p.getHand();
             HandUpdate handUpdate = new HandUpdate(handCard);
-            notifySingleClient(handUpdate, p.getNickName(), MessageType.HAND_UPDATE);
+            notifySingleClient(handUpdate, p.getNickname(), MessageType.HAND_UPDATE);
         }
         //notifico a tutti la briscola
         Card briscola = game.getTableCard().getBriscola();
@@ -113,9 +113,9 @@ public class GameController {
         notifyAllClients(briscolaUpdate, "", MessageType.BRISCOLA_UPDATE);
     }
 
-    public void addPlayerToGame(String nickname) throws CannotAddPlayerNowException {
+    public void addPlayerToGame(Player player) throws CannotAddPlayerNowException {
 
-        game.addPlayer(nickname);
+        game.addPlayer(player);
     }
 
     public int getNumPlayersInGame() {
@@ -125,7 +125,7 @@ public class GameController {
     public void putCard(Seed seed, int value, String nickName) {
 
         try {
-            Player player = game.getPlayerByNickName(nickName);
+            GamePlayer player = game.getPlayerByNickName(nickName);
 
             //controllare se player è attivo, può giocare la carta
             if (player.getPlayerState() != PlayerState.PUT) {
@@ -175,7 +175,7 @@ public class GameController {
     public void setBet(int bet, String nickName) {
 
         try {
-            Player player = game.getPlayerByNickName(nickName);
+            GamePlayer player = game.getPlayerByNickName(nickName);
             //controllare se player è attivo, può giocare la carta
             if (player.getPlayerState() != PlayerState.BET) {
                 //GenericMessage error = new GenericMessage(nickName + " can't put a card now");
@@ -204,17 +204,17 @@ public class GameController {
     }
 
 
-    private void updateTurn(Player currentPlayer) {
+    private void updateTurn(GamePlayer currentPlayer) {
         try {
             currentPlayer.updateState(PlayerState.WAIT);
             //currentPlayer diventa WAIT
-            PlayerStateUpdate playerStateUpdateCurrent = new PlayerStateUpdate(PlayerState.WAIT, currentPlayer.getNickName());
-            notifyAllClients(playerStateUpdateCurrent, currentPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
+            PlayerStateUpdate playerStateUpdateCurrent = new PlayerStateUpdate(PlayerState.WAIT, currentPlayer.getNickname());
+            notifyAllClients(playerStateUpdateCurrent, currentPlayer.getNickname(), MessageType.PLAYER_STATE_UPDATE);
 
             if(game.getNumTurn() == ((NUM_PLAYER * 2) - 1) + 2*(game.getRound())){
                 //alla fine del turno 7 si calcola il vincitore del round e si aggiornano le prese fatte dal winner player
                 String winnerTurnPlayerNickName = checkWinnerRoundPlayer();
-                Player winnerTurnPlayer = game.getPlayerByNickName(winnerTurnPlayerNickName);
+                GamePlayer winnerTurnPlayer = game.getPlayerByNickName(winnerTurnPlayerNickName);
                 game.getTableCard().updateWinnerPlayer(winnerTurnPlayer);
                 game.getTableCard().updatePlayerRoundsWon();
 
@@ -230,7 +230,7 @@ public class GameController {
                     game.getTableCard().resetPlayedCard();
                     resetBetAndRoundsWon();
                     //aggiorna lista player order per il prossimo set
-                    Player nextPlayer = game.getPlayers().get((game.getSet()-1)%NUM_PLAYER);
+                    GamePlayer nextPlayer = game.getPlayers().get((game.getSet()-1)%NUM_PLAYER);
                     game.getTableCard().updatePlayerListOrder(nextPlayer);
                     game.getTableCard().getPlayerListOrder().get(0).updateState(PlayerState.BET);
                     //aggiorna deck e distribuisce carte e briscola
@@ -238,15 +238,15 @@ public class GameController {
                     game.distributeCards();
                     //notifica client fine set con punteggi di tutto il set, vincitore round, nuovo playerListOrder e nuovo state per next player
                     HashMap<String, Integer> nextPlayerOrderAndScore = new HashMap<>();
-                    for(Player p : game.getTableCard().getPlayerListOrder()){
-                        nextPlayerOrderAndScore.put(p.getNickName(), p.getScore());
+                    for(GamePlayer p : game.getTableCard().getPlayerListOrder()){
+                        nextPlayerOrderAndScore.put(p.getNickname(), p.getScore());
                     }
                     EndSetUpdate endSetUpdate = new EndSetUpdate(game.getSet(), nextPlayerOrderAndScore);
                     notifyAllClients(endSetUpdate, "", MessageType.END_SET);
 
                     notifyDistributedCards();
 
-                    String nextPlayerNickName = game.getTableCard().getPlayerListOrder().get(0).getNickName();
+                    String nextPlayerNickName = game.getTableCard().getPlayerListOrder().get(0).getNickname();
                     PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET, nextPlayerNickName);
                     notifyAllClients(playerStateUpdate, nextPlayerNickName, MessageType.PLAYER_STATE_UPDATE);
                 }else{
@@ -260,13 +260,13 @@ public class GameController {
                     game.getTableCard().getPlayerListOrder().get(0).updateState(PlayerState.PUT);
                     //notifica client fine round con vincitore round (chi ha fatto la presa), nuovo playerListOrder e nuovo state per next player
                     HashMap<String, Integer> nextPlayerOrderAndTaken = new HashMap<>();
-                    for(Player p : game.getTableCard().getPlayerListOrder()){
-                        nextPlayerOrderAndTaken.put(p.getNickName(), p.getRoundsWon());
+                    for(GamePlayer p : game.getTableCard().getPlayerListOrder()){
+                        nextPlayerOrderAndTaken.put(p.getNickname(), p.getRoundsWon());
                     }
                     EndRoundUpdate endRoundUpdate = new EndRoundUpdate(game.getRound(), nextPlayerOrderAndTaken);
                     notifyAllClients(endRoundUpdate, "", MessageType.END_ROUND);
 
-                    String nextPlayerNickName = game.getTableCard().getPlayerListOrder().get(0).getNickName();
+                    String nextPlayerNickName = game.getTableCard().getPlayerListOrder().get(0).getNickname();
                     PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.PUT, nextPlayerNickName);
                     notifyAllClients(playerStateUpdate, nextPlayerNickName, MessageType.PLAYER_STATE_UPDATE);
                 }
@@ -274,19 +274,19 @@ public class GameController {
             }else if(game.getNumTurn() < NUM_PLAYER - 1){
                 //turni da 0 a 3 per scommettere sulle prese (entro qui quando turno appena passato è 0,1,2)
                 game.updateNumTurn();
-                Player nextPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn());
+                GamePlayer nextPlayer = game.getTableCard().getPlayerListOrder().get(game.getNumTurn());
                 nextPlayer.updateState(PlayerState.BET);
                 // notifica client prossimo player a scommettere
-                PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET, nextPlayer.getNickName());
-                notifyAllClients(playerStateUpdate, nextPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
+                PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.BET, nextPlayer.getNickname());
+                notifyAllClients(playerStateUpdate, nextPlayer.getNickname(), MessageType.PLAYER_STATE_UPDATE);
             }else{
                 //turni da 4 a 7 per giocare (entro qui quando turno appena passato è 3,4,5,6)
                 game.updateNumTurn();
-                Player nextPlayer = game.getTableCard().getPlayerListOrder().get((game.getNumTurn() - NUM_PLAYER) % NUM_PLAYER);
+                GamePlayer nextPlayer = game.getTableCard().getPlayerListOrder().get((game.getNumTurn() - NUM_PLAYER) % NUM_PLAYER);
                 nextPlayer.updateState(PlayerState.PUT);
                 // notifica client prossimo player a giocare
-                PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.PUT, nextPlayer.getNickName());
-                notifyAllClients(playerStateUpdate, nextPlayer.getNickName(), MessageType.PLAYER_STATE_UPDATE);
+                PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(PlayerState.PUT, nextPlayer.getNickname());
+                notifyAllClients(playerStateUpdate, nextPlayer.getNickname(), MessageType.PLAYER_STATE_UPDATE);
             }
 
         } catch (PlayerNickNameDoesNotExist e) {
@@ -303,7 +303,7 @@ public class GameController {
             }
         }
         //carte e player hanno stesso ordine quindi posso prendere il player vincitore con l'index della carta vincitrice
-        return game.getTableCard().getPlayerListOrder().get(winnerIndex).getNickName();
+        return game.getTableCard().getPlayerListOrder().get(winnerIndex).getNickname();
     }
 
     private boolean checkIfValidBet(int bet, String nickname) {
@@ -312,9 +312,9 @@ public class GameController {
             return false;
         }
         //entro se sta scommettendo l'ultimo player
-        if(game.getTableCard().getPlayerListOrder().get(game.getPlayers().size()-1).getNickName().equals(nickname)){
+        if(game.getTableCard().getPlayerListOrder().get(game.getPlayers().size()-1).getNickname().equals(nickname)){
             //scorro tutti i player fino all'ultimo che scommette (anche l'ultimo tanto avrà bet = 0 dato che la sta impostando ora)
-            for(Player p : game.getPlayers()) {
+            for(GamePlayer p : game.getPlayers()) {
                 totalBet = totalBet + p.getBet();
             }
             if(totalBet == game.getSet()) {
@@ -324,7 +324,7 @@ public class GameController {
         return true;
     }
 
-    private boolean checkIfValidCard(Card card, Player player) {
+    private boolean checkIfValidCard(Card card, GamePlayer player) {
         if(game.getTableCard().getPlayedCards().isEmpty()){
             if(game.getSet() == 10)
                 //se è la prima carta del set 10 allora diventa la briscola per questo round
@@ -376,13 +376,13 @@ public class GameController {
 
     //metodo che aggiorna gli score di tutti i player
     private void updateScore() {
-        for(Player p : game.getPlayers()) {
+        for(GamePlayer p : game.getPlayers()) {
             p.updateScore();
         }
     }
 
     private void resetBetAndRoundsWon() {
-        for(Player p : game.getPlayers()) {
+        for(GamePlayer p : game.getPlayers()) {
             p.resetBet();
             p.resetRoundsWon();
         }

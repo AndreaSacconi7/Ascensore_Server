@@ -1,7 +1,5 @@
 package polimi.ascensore.network.message;
 
-import polimi.ascensore.model.Player;
-
 import java.util.List;
 
 public class StartingGame implements ExecutableInClient {
