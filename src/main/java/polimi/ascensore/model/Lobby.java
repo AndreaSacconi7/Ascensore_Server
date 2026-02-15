@@ -19,6 +19,10 @@ public class Lobby {
         return player;
     }
 
+    public void removePlayerFromLobby(String nickname) {
+        onlinePlayers.remove(nickname);
+    }
+
     public Player getPlayerByNickname(String nickname) {
         return onlinePlayers.get(nickname);
     }

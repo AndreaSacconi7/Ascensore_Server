@@ -14,4 +14,7 @@ public enum MessageType {
     TEXT_MESSAGE,
     END_ROUND,
     END_SET,
+    PLAYER_EXIT_GAME,
+    END_GAME,
+    INFO_AFTER_RECONNECTION
 }

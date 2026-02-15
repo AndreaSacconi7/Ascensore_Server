@@ -2,6 +2,7 @@ package polimi.ascensore.JPA;
 
 
 import jakarta.persistence.*;
+import polimi.ascensore.model.PlayerState;
 
 
 @Entity
@@ -15,6 +16,8 @@ public class Player {
     private String supabaseUid; // Il "ponte"
 
     private String nickname;
+
+    private PlayerConnection connectionStatus = PlayerConnection.ONLINE;
 
     // Statistiche di gioco (con valori di default)
     //private int level = 1;
@@ -43,5 +46,13 @@ public class Player {
 
     public String getNickname() {
         return nickname;
+    }
+
+    public PlayerConnection getConnectionStatus() {
+        return connectionStatus;
+    }
+
+    public void setConnectionStatus(PlayerConnection connectionStatus) {
+        this.connectionStatus = connectionStatus;
     }
 }

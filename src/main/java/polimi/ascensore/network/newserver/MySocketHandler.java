@@ -70,6 +70,10 @@ public class MySocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
+        boolean playerInGame = masterServer.checkIfPlayerInGame(session.getId());
+        if(playerInGame){
+            masterServer.handlePlayerDisconnection(session.getId());
+        }
         for(Map.Entry<String, WebSocketSession> entry : sessions.entrySet()) {
             if(entry.getValue() == session) {
                 sessions.remove(entry.getKey());
@@ -158,6 +162,10 @@ public class MySocketHandler extends TextWebSocketHandler {
 
     public WebSocketSession getSession(String sessionId) {
         return sessions.get(sessionId);
+    }
+
+    public void removeSession(String sessionId) {
+        sessions.remove(sessionId);
     }
 
 }

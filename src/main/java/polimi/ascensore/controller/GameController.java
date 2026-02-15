@@ -23,10 +23,13 @@ public class GameController {
 
     private MySocketHandler gameNotifications;
 
-    public GameController() {
+    private GameLifeCycleListener gameLifeCycleListener;
+
+    public GameController(GameLifeCycleListener gameLifeCycleListener) {
 
         game = new Game();
         this.gameNotifications = null;
+        this.gameLifeCycleListener = gameLifeCycleListener;
     }
 
     public void setSocketHandler(MySocketHandler mySocketHandler) {
@@ -40,7 +43,7 @@ public class GameController {
         synchronized (gameNotifications) {
 
             //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
-            gameNotifications.forwardUpdateToAll(message, nickname);
+            gameNotifications.forwardUpdateToAll(message, null);
         }
     }
 
@@ -203,6 +206,69 @@ public class GameController {
         }
     }
 
+    public void playerExitGame(String nickname){
+
+        try {
+            //giocatori con stato EXIT non possono vincere la partita
+            game.getPlayerByNickName(nickname).updateState(PlayerState.EXIT);
+        } catch (PlayerNickNameDoesNotExist e) {
+            System.out.println("Player not found in exitGame");
+        }
+
+        //notifico a tutti i player che questo player è uscito
+        PlayerExitGame playerExitGameUpdate = new PlayerExitGame(nickname);
+        notifyAllClients(playerExitGameUpdate, null, MessageType.PLAYER_EXIT_GAME);
+
+        //TODO: per ora facciamo che se un giocatore esce dalla partita allora finisce. in seguito poi la facciamo continuare senza di lui
+        endGameResult();
+    }
+
+    public void sendAllDataAfterReconnection(String nickname) {
+        try {
+            GamePlayer player = game.getPlayerByNickName(nickname);
+
+            //notifico al player le sue carte in mano
+            List<String> playerNicknames = new LinkedList<>();
+            for(GamePlayer p : game.getTableCard().getPlayerListOrder()){
+                playerNicknames.add(p.getNickname());
+            }
+            //inizio partita per il giocatore riconnesso
+            StartingGame startingGame = new StartingGame(playerNicknames);
+
+            //carte in mano
+            List<Card> handCard = player.getHand();
+            HandUpdate handUpdate = new HandUpdate(handCard);
+
+            //la briscola
+            Card briscola = game.getTableCard().getBriscola();
+            BriscolaUpdate briscolaUpdate = new BriscolaUpdate(briscola);
+
+            notifySingleClient(startingGame, nickname, MessageType.STARTING_GAME);
+            notifySingleClient(briscolaUpdate, nickname, MessageType.BRISCOLA_UPDATE);
+            notifySingleClient(handUpdate, nickname, MessageType.HAND_UPDATE);
+
+            //bet, prese fatte (round vinti) e score di tutti i player
+            HashMap<String, Integer> scores = new HashMap<>();
+            HashMap<String, Integer> bets = new HashMap<>();
+            HashMap<String, Integer> roundsWon = new HashMap<>();
+
+            for(GamePlayer p : game.getPlayers()){
+                scores.put(p.getNickname(), p.getScore());
+                bets.put(p.getNickname(), p.getBet());
+                roundsWon.put(p.getNickname(), p.getRoundsWon());
+            }
+            InfoAfterReconnection infoAfterReconnection = new InfoAfterReconnection(scores, bets, roundsWon);
+            notifySingleClient(infoAfterReconnection, nickname, MessageType.INFO_AFTER_RECONNECTION);
+
+            PlayerState playerState = player.getPlayerState();
+            PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(playerState, nickname);
+            notifySingleClient(playerStateUpdate, nickname, MessageType.PLAYER_STATE_UPDATE);
+
+        } catch (PlayerNickNameDoesNotExist e) {
+            System.out.println("Player not found in sendAllDataAfterReconnection");
+        }
+    }
+
 
     private void updateTurn(GamePlayer currentPlayer) {
         try {
@@ -224,6 +290,11 @@ public class GameController {
                     //finiti tutti i round del set quindi si calcolano punteggi
                     updateScore();
                     //aggiorna set, round e resetta numTurn, le carte giocate e le scommesse e le prese fatte
+                    if(game.checkIfEndGame()){
+                        //fine partita
+                        endGameResult();
+                        return;
+                    }
                     game.updateSet();
                     game.resetRound();
                     game.resetNumTurn();
@@ -292,6 +363,24 @@ public class GameController {
         } catch (PlayerNickNameDoesNotExist e) {
             System.out.println("Player not found");
         }
+    }
+
+    private void endGameResult(){
+        List<GamePlayer> gameResults = game.endGame();
+
+        HashMap<String, Integer> resultAndScore = new HashMap<>();
+        for(GamePlayer p : gameResults){
+            if(p.getPlayerState() != PlayerState.EXIT)
+                resultAndScore.put(p.getNickname(), p.getScore());
+            else
+                resultAndScore.put(p.getNickname(), -500); //punteggio fittizzio per giocatore uscito dal game
+        }
+
+        EndGame endGameUpdate = new EndGame(resultAndScore);
+        notifyAllClients(endGameUpdate, null, MessageType.END_GAME);
+
+        //notificare MasterController della partita finita per poterla rimuovere dalla lista partite attive e per poter aggiornare le statistiche dei player nel database
+        gameLifeCycleListener.onGameEnded(this);
     }
 
     private String checkWinnerRoundPlayer(){

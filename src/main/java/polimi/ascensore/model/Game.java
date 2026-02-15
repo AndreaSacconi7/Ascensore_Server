@@ -70,20 +70,50 @@ public class Game {
         players.add(gamePlayer);
     }
 
+    //rimuovo giocatori disconnessi dal gioco per far continuare la partita
+    public void removePlayer(String nickname) throws PlayerNickNameDoesNotExist {
+        for(GamePlayer p : players) {
+            if(p.getNickname().equals(nickname)) {
+                players.remove(p);
+                return;
+            }
+        }
+        throw new PlayerNickNameDoesNotExist();
+    }
+
+    public boolean checkIfEndGame(){
+        //ho finito ultimo set
+        return setVariation == -1 && set == 1;
+    }
+
     public void updateSet() {
         //quando arrivo a dieci devo diminuire i set anzichè aumentarli
         if(set == 10)
             setVariation = -1;
-        else if(setVariation == -1 && set == 1){
-            //ho finito ultimo set
-            endGame();
-        }
 
         this.set = this.set + setVariation;
     }
 
-    public void endGame(){
+    public List<GamePlayer> endGame(){
         System.out.println("Game Over");
+
+        return getResult();
+    }
+
+    private List<GamePlayer> getResult(){
+        List<GamePlayer> results = new ArrayList<>();
+        GamePlayer maxScorePlayer;
+        for(GamePlayer k : players){
+            maxScorePlayer = k;
+            for(GamePlayer p : players){
+                if(p.getScore() > maxScorePlayer.getScore() && p.getPlayerState() != PlayerState.EXIT && !results.contains(p))
+                    maxScorePlayer = p;
+            }
+            if(!results.contains(maxScorePlayer))
+                results.add(maxScorePlayer);
+        }
+
+        return results;
     }
 
     public void updateRound() {

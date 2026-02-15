@@ -1,6 +1,7 @@
 package polimi.ascensore.network.server;
 
 import org.springframework.stereotype.Service;
+import polimi.ascensore.controller.GameController;
 import polimi.ascensore.controller.MasterController;
 import polimi.ascensore.model.Seed;
 import polimi.ascensore.network.command.Command;
@@ -8,6 +9,7 @@ import polimi.ascensore.network.command.ExecutableInServer;
 import polimi.ascensore.network.newserver.MySocketHandler;
 
 import java.time.LocalTime;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Queue;
 
@@ -80,7 +82,7 @@ public class MasterServer {
     public void addClient(String nickName, String password, String clientSessionId) {
 
         //controller.addClientHandler(clientHandler);
-        //masterController.loginPlayer(nickName, clientSessionId);
+        //masterController.firstLoginPlayer(nickName, clientSessionId);
     }
 
     public void setSocketHandler(MySocketHandler socketHandler) {
@@ -93,5 +95,16 @@ public class MasterServer {
 
     public void joinGame(String sessionId) {
         masterController.addPlayerToGame(sessionId);
+    }
+
+    public boolean checkIfPlayerInGame(String sessionId) {
+        return masterController.checkIfPlayerInGame(sessionId);
+    }
+
+    public void handlePlayerDisconnection(String sessionId) {
+        masterController.handlePlayerDisconnection(sessionId);
+    }
+
+    public void handlePlayerReconnection(String sessionId) {
     }
 }
