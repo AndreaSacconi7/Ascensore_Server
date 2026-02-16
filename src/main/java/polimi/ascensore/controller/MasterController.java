@@ -95,6 +95,7 @@ public class MasterController implements GameLifeCycleListener {
         Optional<Player> playerOpt = playerRepository.findBySupabaseUid(supabaseUid);
 
         Player player;
+        boolean playerInGame = false;
 
         if (playerOpt.isPresent()) {
             // --- CASO A: AUTO-LOGIN (Utente già registrato) ---
@@ -103,11 +104,8 @@ public class MasterController implements GameLifeCycleListener {
             System.out.println("Bentornato " + player.getNickname());
             gameNotifications.addNicknameToSessionIdNode(player.getNickname(), sessionId);
             // Controlla se il giocatore è già in una partita (ovvero se gli è caduta la connessione e sta cercando di rientrare)
-            boolean playerInGame = checkIfPlayerInGame(sessionId);
-            if(playerInGame){
-                //mettere il giocatore in partita, ovvero ricollegarlo alla partita a cui stava giocando prima della disconnessione
-                handlePlayerReconnection(player);
-            }
+            playerInGame = checkIfPlayerInGame(player.getSupabaseUid());
+            System.out.println("Player " + player.getNickname() + " is in game: " + playerInGame + "----------------------------------------------------");
         } else {
             // --- CASO B: PRIMO ACCESSO ASSOLUTO (Nuovo Utente) ---
             player = firstLoginPlayer(nicknameOpzionale, sessionId, supabaseUid); // Questo metodo si occuperà di creare il Player e salvarlo nel DB
@@ -124,6 +122,12 @@ public class MasterController implements GameLifeCycleListener {
             System.out.println("Player info fetched for " + player.getNickname() + ", sending response...");
             // 5. Rispondi al client
             gameNotifications.sendMessageToClient(message, sessionId);
+
+            if(playerInGame){
+                System.out.println("Sending all info to Player " + player.getNickname() + " that is trying to reconnect to the game..." + "----------------------------------------------------");
+                //mettere il giocatore in partita, ovvero ricollegarlo alla partita a cui stava giocando prima della disconnessione
+                handlePlayerReconnection(player, sessionId);
+            }
         }else{
             System.err.println("Errore nel login, player è null");
 
@@ -148,7 +152,7 @@ public class MasterController implements GameLifeCycleListener {
         for(GameController gc : notStartedGameControllersList){
             try {
                 lobby.removePlayerFromLobby(player.getNickname()); //tolgo il giocatore dalla lobby
-                gc.addPlayerToGame(player); //inserisco giocagore nella partita
+                gc.addPlayerToGame(player, sessionId); //inserisco giocagore nella partita
                 isJoined = true;
                 System.out.println("Player " + player.getNickname() + " added to game controller");
                 //TODO: potrei spostare il player dalla lobby a dentro il game. poi quando finisce la partita lo tiro fuori e lo rimetto in lobby
@@ -230,13 +234,9 @@ public class MasterController implements GameLifeCycleListener {
 
     ///CONNECTION RESILIENCE METHODS///
 
-    public boolean checkIfPlayerInGame(String sessionId) {
-        Player player = getPlayerBySession(sessionId);
-        if (player != null) {
-            return playerGameMap.containsKey(player.getSupabaseUid());
-        }
-        //non dovrei arrivare mai qui
-        return false;
+    public boolean checkIfPlayerInGame(String supabaseUid) {
+
+        return playerGameMap.containsKey(supabaseUid);
     }
 
     public void handlePlayerDisconnection(String sessionId) {
@@ -262,14 +262,14 @@ public class MasterController implements GameLifeCycleListener {
         disconnectTimers.put(playerUuid, timer);
     }
 
-    private void handlePlayerReconnection(Player player) {
+    private void handlePlayerReconnection(Player player, String sessionId) {
 
         if (player != null) {
             player.setConnectionStatus(PlayerConnection.ONLINE);
             onPlayerReconnected(player.getSupabaseUid());
             //playerGameMap.get(player.getSupabaseUid()).notifyPlayerReconnection(player.getNickname());
             GameController gameController = playerGameMap.get(player.getSupabaseUid());
-            gameController.sendAllDataAfterReconnection(player.getNickname());
+            gameController.sendAllDataAfterReconnection(player.getNickname(), sessionId);
         }else{
             //non dovrebbe accadere
             System.err.println("Errore: giocatore NULL " + " nel database durante la riconnessione.");
@@ -317,5 +317,14 @@ public class MasterController implements GameLifeCycleListener {
         System.out.println("Partita terminata, pulisco dati partita...");
         playerGameMap.entrySet().removeIf(entry -> entry.getValue().equals(gameController));
         System.out.println("PARTITE ATTIVE: " + playerGameMap);
+    }
+
+    public void logout(String clientSessionId) {
+        Player player = getPlayerBySession(clientSessionId);
+        if(checkIfPlayerInGame(player.getSupabaseUid())){
+            //se il giocatore è in partita finalizzo direttamente la disconnessione senza aspettare il timer
+            finalizeDisconnection(getPlayerBySession(clientSessionId).getSupabaseUid());
+        }
+        gameNotifications.removeSession(clientSessionId);
     }
 }

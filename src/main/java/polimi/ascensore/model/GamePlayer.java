@@ -8,6 +8,10 @@ import java.util.List;
 
 public class GamePlayer {
 
+    private String supabaseId;
+
+    private String sessionId;
+
     private String nickname;
 
     private int score;
@@ -20,7 +24,9 @@ public class GamePlayer {
 
     private PlayerState playerState;
 
-    public GamePlayer(Player player){
+    public GamePlayer(Player player, String sessionId){
+        this.supabaseId = player.getSupabaseUid();
+        this.sessionId = sessionId;
         this.nickname = player.getNickname();
         this.score = 0;
         this.bet = 0;
@@ -28,13 +34,13 @@ public class GamePlayer {
         this.playerState = PlayerState.IDLE;
     }
 
-    public GamePlayer(String nickname) {
+    /*public GamePlayer(String nickname) {
         this.nickname = nickname;
         this.score = 0;
         this.bet = 0;
         this.hand = new ArrayList<>();
         this.playerState = PlayerState.IDLE;
-    }
+    }*/
 
     public void updateScore() {
         if(roundsWon == bet){
@@ -109,5 +115,13 @@ public class GamePlayer {
 
     public String getUsername() {
         return nickname;
+    }
+
+    public String getSessionId() {
+        return sessionId;
+    }
+
+    public void setSessionId(String sessionId) {
+        this.sessionId = sessionId;
     }
 }

@@ -43,7 +43,7 @@ public class GameController {
         synchronized (gameNotifications) {
 
             //sincronizzazione che dovrebbe servire ad evitare contrasti tra messaggi di Ping e messaggi di Update
-            gameNotifications.forwardUpdateToAll(message, null);
+            gameNotifications.forwardUpdateToAll(message, game.getPlayers());
         }
     }
 
@@ -116,9 +116,9 @@ public class GameController {
         notifyAllClients(briscolaUpdate, "", MessageType.BRISCOLA_UPDATE);
     }
 
-    public void addPlayerToGame(Player player) throws CannotAddPlayerNowException {
+    public void addPlayerToGame(Player player, String sessionId) throws CannotAddPlayerNowException {
 
-        game.addPlayer(player);
+        game.addPlayer(player, sessionId);
     }
 
     public int getNumPlayersInGame() {
@@ -223,9 +223,11 @@ public class GameController {
         endGameResult();
     }
 
-    public void sendAllDataAfterReconnection(String nickname) {
+    public void sendAllDataAfterReconnection(String nickname, String sessionId) {
         try {
             GamePlayer player = game.getPlayerByNickName(nickname);
+            //aggiorno la sessionId del player riconnesso
+            player.setSessionId(sessionId);
 
             //notifico al player le sue carte in mano
             List<String> playerNicknames = new LinkedList<>();
@@ -259,6 +261,11 @@ public class GameController {
             }
             InfoAfterReconnection infoAfterReconnection = new InfoAfterReconnection(scores, bets, roundsWon);
             notifySingleClient(infoAfterReconnection, nickname, MessageType.INFO_AFTER_RECONNECTION);
+
+            //TODO: da inviare anche le carte giocate da tutti i player
+            /*for(GamePlayer p : game.getPlayers()){
+                if(game.getTableCard().getPlayedCards())
+            }*/
 
             PlayerState playerState = player.getPlayerState();
             PlayerStateUpdate playerStateUpdate = new PlayerStateUpdate(playerState, nickname);

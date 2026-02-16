@@ -8,6 +8,8 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+import polimi.ascensore.model.GamePlayer;
+import polimi.ascensore.model.PlayerState;
 import polimi.ascensore.network.command.Command;
 import polimi.ascensore.network.message.Message;
 import polimi.ascensore.network.server.MasterServer;
@@ -18,8 +20,10 @@ import java.util.*;
 @Component
 public class MySocketHandler extends TextWebSocketHandler {
 
+    //sessionId, session
     HashMap<String, WebSocketSession> sessions;
 
+    //nickname, sessionId
     HashMap<String, String> nicknameToSessionId;
 
     MasterServer masterServer;
@@ -74,12 +78,15 @@ public class MySocketHandler extends TextWebSocketHandler {
         if(playerInGame){
             masterServer.handlePlayerDisconnection(session.getId());
         }
-        for(Map.Entry<String, WebSocketSession> entry : sessions.entrySet()) {
-            if(entry.getValue() == session) {
-                sessions.remove(entry.getKey());
+        for(String nick : nicknameToSessionId.keySet()) {
+            if(nicknameToSessionId.get(nick).equals(session.getId())) {
+                System.out.println("Removing nickname-session mapping for: " + nick);
+                sessions.remove(nick);
                 break;
             }
         }
+        sessions.remove(session.getId());
+        //nicknameToSessionId.remove(session.getId());
         System.out.println("Connection closed: " + session.getId());
     }
 
@@ -99,17 +106,20 @@ public class MySocketHandler extends TextWebSocketHandler {
         }
     }
 
-    public void forwardUpdateToAll(Message message, String nickname) {
+    public void forwardUpdateToAll(Message message, List<GamePlayer> playersInGame){
 
         WebSocketMessage<String> msg = new TextMessage(message.toJson());
         System.out.println("Sending: " + msg.getPayload());
-        for(Map.Entry<String, WebSocketSession> entry : sessions.entrySet()) {
-            WebSocketSession session = entry.getValue();
-            try {
-                session.sendMessage(msg);
-            } catch (IOException e) {
-                System.err.println("Error sending message to client " + entry.getKey() + ": " + e.getMessage());
-                e.printStackTrace();
+        //invia a tutti i giocatori in partita
+        for(GamePlayer p : playersInGame) {
+            if(p.getPlayerState() != PlayerState.EXIT){
+                WebSocketSession session = sessions.get(p.getSessionId());
+                try {
+                    session.sendMessage(msg);
+                } catch (IOException e) {
+                    System.err.println("Error sending message to client : " + p + " - " + e.getMessage());
+                    e.printStackTrace();
+                }
             }
         }
     }
@@ -164,7 +174,16 @@ public class MySocketHandler extends TextWebSocketHandler {
         return sessions.get(sessionId);
     }
 
+    //chiamato quando un utente fa logout senza chiudere l'app
     public void removeSession(String sessionId) {
+
+        for(String nick : nicknameToSessionId.keySet()) {
+            if(nicknameToSessionId.get(nick).equals(sessionId)) {
+                System.out.println("Removing nickname-session mapping for: " + nick);
+                sessions.remove(nick);
+                break;
+            }
+        }
         sessions.remove(sessionId);
     }
 

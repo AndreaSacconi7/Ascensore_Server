@@ -17,7 +17,7 @@ import java.util.List;
 
 public class Game {
 
-    public static int setVariation = 1;
+    public static int setVariation = -1;
 
     public static final int NUM_PLAYER = 2;
 
@@ -61,12 +61,12 @@ public class Game {
             tableCard.setBriscola(null);
     }
 
-    public void addPlayer(Player player) throws CannotAddPlayerNowException {
+    public void addPlayer(Player player, String sessionId) throws CannotAddPlayerNowException {
         for( GamePlayer p : players) {
             if(p.getPlayerState() != PlayerState.IDLE)
                 throw new CannotAddPlayerNowException();
         }
-        GamePlayer gamePlayer = new GamePlayer(player);
+        GamePlayer gamePlayer = new GamePlayer(player, sessionId);
         players.add(gamePlayer);
     }
 

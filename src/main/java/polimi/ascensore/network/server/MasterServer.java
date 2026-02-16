@@ -1,6 +1,7 @@
 package polimi.ascensore.network.server;
 
 import org.springframework.stereotype.Service;
+import polimi.ascensore.JPA.Player;
 import polimi.ascensore.controller.GameController;
 import polimi.ascensore.controller.MasterController;
 import polimi.ascensore.model.Seed;
@@ -98,7 +99,8 @@ public class MasterServer {
     }
 
     public boolean checkIfPlayerInGame(String sessionId) {
-        return masterController.checkIfPlayerInGame(sessionId);
+        Player player = masterController.getPlayerBySession(sessionId);
+        return masterController.checkIfPlayerInGame(player.getSupabaseUid());
     }
 
     public void handlePlayerDisconnection(String sessionId) {
@@ -106,5 +108,9 @@ public class MasterServer {
     }
 
     public void handlePlayerReconnection(String sessionId) {
+    }
+
+    public void logout(String clientSessionId) {
+        masterController.logout(clientSessionId);
     }
 }

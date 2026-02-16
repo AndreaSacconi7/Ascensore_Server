@@ -15,5 +15,7 @@ public enum CommandType {
     //comando inviato dal client per posizionare una carta sul tavolo
     PUT_CARD,
     //comando inviato dal client per chiamare le prese che vuole fare
-    SET_BET
+    SET_BET,
+    //logout del client
+    LOGOUT
 }
