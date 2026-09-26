@@ -135,7 +135,7 @@ public class GameController {
                 //GenericMessage error = new GenericMessage(nickName + " can't put a card now");
                 //notifyObservers(error, nickName);
                 TextMessage error = new TextMessage(nickName + " can't put a card now");
-                notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
+                notifySingleClient(error, nickName, MessageType.TEXT_MESSAGE);
                 return;
             }
             //controllo se il player ha la carta in mano
@@ -149,7 +149,7 @@ public class GameController {
             if(card == null){
                 //notifica client carta non valida
                 TextMessage error = new TextMessage("Invalid card played by " + nickName + ". He does not have this card in hand");
-                notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
+                notifySingleClient(error, nickName, MessageType.TEXT_MESSAGE);
                 return;
             }
             //controllo se la carta è valida oppure non può giocarla per i vincoli sui seed
@@ -163,7 +163,7 @@ public class GameController {
                 updateTurn(player);
             }else{
                 TextMessage error = new TextMessage("Invalid card played by " + nickName + ", must follow the seed of the first card played");
-                notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
+                notifySingleClient(error, nickName, MessageType.TEXT_MESSAGE);
             }
 
         } catch (PlayerNickNameDoesNotExist e) {
@@ -171,7 +171,7 @@ public class GameController {
         } catch (InvalidCard e) {
             System.out.println("Invalid card");
             TextMessage error = new TextMessage("Invalid card played by " + nickName);
-            notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
+            notifySingleClient(error, nickName, MessageType.TEXT_MESSAGE);
         }
     }
 
@@ -184,7 +184,7 @@ public class GameController {
                 //GenericMessage error = new GenericMessage(nickName + " can't put a card now");
                 //notifyObservers(error, nickName);
                 TextMessage error = new TextMessage(nickName + " can't set a bet now");
-                notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
+                notifySingleClient(error, nickName, MessageType.TEXT_MESSAGE);
                 return;
             }
             //controllare se la scommessa è valida oppure bet totali == num giocatori (quindi invalida)
@@ -198,7 +198,7 @@ public class GameController {
             } else {
                 //notifica client scommessa non valida
                 TextMessage error = new TextMessage("Invalid bet of " + nickName + ", total bet can't be equal to number of players");
-                notifyAllClients(error, nickName, MessageType.TEXT_MESSAGE);
+                notifySingleClient(error, nickName, MessageType.TEXT_MESSAGE);
             }
 
         } catch (PlayerNickNameDoesNotExist e) {

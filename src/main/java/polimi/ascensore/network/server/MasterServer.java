@@ -1,67 +1,35 @@
 package polimi.ascensore.network.server;
 
 import org.springframework.stereotype.Service;
-import polimi.ascensore.JPA.Player;
-import polimi.ascensore.controller.GameController;
+import polimi.ascensore.controller.CommandLoop;
 import polimi.ascensore.controller.MasterController;
 import polimi.ascensore.model.Seed;
 import polimi.ascensore.network.command.Command;
 import polimi.ascensore.network.command.ExecutableInServer;
 import polimi.ascensore.network.newserver.MySocketHandler;
 
-import java.time.LocalTime;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.Queue;
-
 @Service
 public class MasterServer {
 
     private final MasterController masterController;
 
-    //private final GameController gameController;
-
-    private final Object lockCommand = new Object();
-
-    private Queue<Command> commandList;
+    private final CommandLoop commandLoop;
 
     //TODO: conviene far si che questa rimanga come unico server che smista i comandi ai vari game controller. e in ognuno di essi pongo una coda che gli esegue
-    public MasterServer(MasterController masterController) {
+    public MasterServer(MasterController masterController, CommandLoop commandLoop) {
         System.out.println("MasterServer created");
-        //this.gameController = gameController;
         this.masterController = masterController;
-        this.commandList = new LinkedList<>();
-
-        new Thread(() -> {
-            ExecutableInServer executable;
-            while (true) {
-                synchronized (lockCommand) {
-                    if (commandList.isEmpty()){
-                        executable = null;
-                        try {
-                            System.out.println("MasterServer: waiting" + LocalTime.now());
-                            lockCommand.wait();                            //eseguo l'istruzione
-                            System.out.println("MasterServer: woke up" + LocalTime.now());
-                        } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
-                        }
-                    }else {
-                        executable = commandList.poll().getExecutable();
-
-                    }
-                }
-                executeExecutable(executable);
-            }
-        }).start();
+        this.commandLoop = commandLoop;
     }
 
+    // Called on WebSocket container threads: the command itself only ever runs on the command loop.
     public void addCommandToList(Command command) {
+        commandLoop.submit(() -> executeExecutable(command.getExecutable()));
+    }
 
-        System.out.println("Aggiungo command a lista");
-        synchronized (lockCommand) {
-            commandList.add(command);
-            lockCommand.notifyAll();
-        }
+    // Queued behind any command the session already sent, so those are processed before its cleanup.
+    public void handleConnectionClosed(String sessionId) {
+        commandLoop.submit(() -> masterController.handleConnectionClosed(sessionId));
     }
 
     public void putCard(Seed seed, int value, String sessionId) {
@@ -96,15 +64,6 @@ public class MasterServer {
 
     public void joinGame(String sessionId) {
         masterController.addPlayerToGame(sessionId);
-    }
-
-    public boolean checkIfPlayerInGame(String sessionId) {
-        Player player = masterController.getPlayerBySession(sessionId);
-        return masterController.checkIfPlayerInGame(player.getSupabaseUid());
-    }
-
-    public void handlePlayerDisconnection(String sessionId) {
-        masterController.handlePlayerDisconnection(sessionId);
     }
 
     public void handlePlayerReconnection(String sessionId) {

@@ -16,15 +16,18 @@ import polimi.ascensore.network.server.MasterServer;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class MySocketHandler extends TextWebSocketHandler {
 
+    // Concurrent maps: sessions are added on WebSocket container threads and read by the command loop.
+
     //sessionId, session
-    HashMap<String, WebSocketSession> sessions;
+    private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
 
     //nickname, sessionId
-    HashMap<String, String> nicknameToSessionId;
+    private final Map<String, String> nicknameToSessionId = new ConcurrentHashMap<>();
 
     MasterServer masterServer;
 
@@ -32,8 +35,6 @@ public class MySocketHandler extends TextWebSocketHandler {
 
     public MySocketHandler(MasterServer masterServer) {
         this.masterServer = masterServer;
-        this.sessions = new HashMap<>();
-        this.nicknameToSessionId = new HashMap<>();
         gson = new GsonBuilder()
                 .registerTypeAdapter(Command.class, new CommandDeserializer())
                 .create();
@@ -74,19 +75,8 @@ public class MySocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
-        boolean playerInGame = masterServer.checkIfPlayerInGame(session.getId());
-        if(playerInGame){
-            masterServer.handlePlayerDisconnection(session.getId());
-        }
-        for(String nick : nicknameToSessionId.keySet()) {
-            if(nicknameToSessionId.get(nick).equals(session.getId())) {
-                System.out.println("Removing nickname-session mapping for: " + nick);
-                sessions.remove(nick);
-                break;
-            }
-        }
-        sessions.remove(session.getId());
-        //nicknameToSessionId.remove(session.getId());
+        // Game-side cleanup (reconnection timer, session removal) runs on the command loop
+        masterServer.handleConnectionClosed(session.getId());
         System.out.println("Connection closed: " + session.getId());
     }
 
@@ -113,77 +103,63 @@ public class MySocketHandler extends TextWebSocketHandler {
         //invia a tutti i giocatori in partita
         for(GamePlayer p : playersInGame) {
             if(p.getPlayerState() != PlayerState.EXIT){
-                WebSocketSession session = sessions.get(p.getSessionId());
-                try {
-                    session.sendMessage(msg);
-                } catch (IOException e) {
-                    System.err.println("Error sending message to client : " + p + " - " + e.getMessage());
-                    e.printStackTrace();
-                }
+                send(getSession(p.getSessionId()), msg, p.getNickname());
             }
         }
     }
 
     public void forwardUpdateToSingleClient(Message message, String nickname){
 
-        for(Map.Entry<String, String> entryNick : nicknameToSessionId.entrySet()) {
-            //cerco id correspondente al nickname
-            if(entryNick.getKey().equals(nickname)) {
-                for (Map.Entry<String, WebSocketSession> entryId : sessions.entrySet()) {
-                    //cerco session corrispondente all'id
-                    if(entryId.getKey().equals(entryNick.getValue())){
-                        WebSocketSession session = entryId.getValue();
-                        try {
-                            WebSocketMessage<String> msg = new TextMessage(message.toJson());
-                            System.out.println("Sending to " + nickname + ": " + msg.getPayload());
-                            session.sendMessage(msg);
-                        } catch (IOException e) {
-                            System.err.println("Error sending message to client " + nickname + ": " + e.getMessage());
-                            e.printStackTrace();
-                        }
-                        break; // Exit the loop once the matching session is found
-                    }
-                }
-            }
-        }
+        WebSocketMessage<String> msg = new TextMessage(message.toJson());
+        System.out.println("Sending to " + nickname + ": " + msg.getPayload());
+        String sessionId = nickname == null ? null : nicknameToSessionId.get(nickname);
+        send(getSession(sessionId), msg, nickname);
     }
 
     public void addNicknameToSessionIdNode(String nickname, String sessionId){
         nicknameToSessionId.put(nickname, sessionId);
     }
 
+    /**
+     * True if {@code sessionId} is the socket the player is currently using. After a reconnection the
+     * player's old socket can report its close late, and that close must not affect the new session.
+     */
+    public boolean isCurrentSession(String nickname, String sessionId) {
+        return nickname != null && sessionId.equals(nicknameToSessionId.get(nickname));
+    }
+
     public void sendMessageToClient(Message message, String sessionId){
-        WebSocketSession session = sessions.get(sessionId);
 
-        if (session != null) {
+        WebSocketMessage<String> msg = new TextMessage(message.toJson());
+        System.out.println("Sending : " + msg.getPayload());
+        send(getSession(sessionId), msg, sessionId);
+    }
 
-            WebSocketMessage<String> msg = new TextMessage(message.toJson());
-
-            System.out.println("Sending : " + msg.getPayload());
-            try {
-                session.sendMessage(msg);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        }else{
-            System.err.println("No session found for sessionId: " + sessionId);
+    /**
+     * Sends to one recipient and never throws: a player who is mid-reconnection has no open session,
+     * and failing on them would abort the broadcast (and the game update) for everyone else.
+     */
+    private void send(WebSocketSession session, WebSocketMessage<String> msg, String recipient) {
+        if (session == null || !session.isOpen()) {
+            System.err.println("No open session for " + recipient + ", message skipped");
+            return;
+        }
+        try {
+            session.sendMessage(msg);
+        } catch (IOException | IllegalStateException e) {
+            System.err.println("Error sending message to " + recipient + ": " + e.getMessage());
         }
     }
 
     public WebSocketSession getSession(String sessionId) {
-        return sessions.get(sessionId);
+        return sessionId == null ? null : sessions.get(sessionId);
     }
 
-    //chiamato quando un utente fa logout senza chiudere l'app
+    // Called on the command loop, on logout and when a socket closes
     public void removeSession(String sessionId) {
 
-        for(String nick : nicknameToSessionId.keySet()) {
-            if(nicknameToSessionId.get(nick).equals(sessionId)) {
-                System.out.println("Removing nickname-session mapping for: " + nick);
-                sessions.remove(nick);
-                break;
-            }
-        }
+        // Only drop the nickname mapping if it still points here: after a reconnection it points to the new session
+        nicknameToSessionId.entrySet().removeIf(entry -> entry.getValue().equals(sessionId));
         sessions.remove(sessionId);
     }
 

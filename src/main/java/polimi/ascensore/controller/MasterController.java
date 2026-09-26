@@ -37,8 +37,11 @@ public class MasterController implements GameLifeCycleListener {
 
     ////DISCONNECTION HANDLING/////
 
-    // Mappa per salvare i timer attivi: PlayerUUID -> ScheduledFuture
-    private final Map<String, ScheduledFuture<?>> disconnectTimers = new ConcurrentHashMap<>();
+    // Runs every state change, including expired reconnection timers
+    private final CommandLoop commandLoop;
+
+    // Pending reconnection windows: PlayerUUID -> timer. Only touched on the command loop.
+    private final Map<String, PendingDisconnect> disconnectTimers = new ConcurrentHashMap<>();
 
     // Il motore che esegue i timer in background
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
@@ -46,8 +49,14 @@ public class MasterController implements GameLifeCycleListener {
     // Tempo di attesa prima della disconnessione definitiva (es. 60 secondi)
     private static final int DISCONNECT_TIMEOUT = 60;
 
+    // One reconnection window. Compared by identity, so a timer that fired late cannot close a newer window.
+    private static final class PendingDisconnect {
+        private ScheduledFuture<?> timer;
+    }
 
-    public MasterController() {
+
+    public MasterController(CommandLoop commandLoop) {
+        this.commandLoop = commandLoop;
         lobby = new Lobby();
         notStartedGameControllersList = new LinkedList<>();
         playerGameMap = new HashMap<>();
@@ -87,7 +96,9 @@ public class MasterController implements GameLifeCycleListener {
         String supabaseUid = authService.validateAndGetUserId(token);
 
         if (supabaseUid == null) {
-            //gameNotifications.closeSession(sessionId); // Token non valido
+            // Invalid or expired token: answer instead of leaving the client on the loading screen
+            Message message = new Message(new PlayerInfoResponse("", false), MessageType.PLAYER_INFO_RESPONSE);
+            gameNotifications.sendMessageToClient(message, sessionId);
             return;
         }
 
@@ -106,6 +117,9 @@ public class MasterController implements GameLifeCycleListener {
             // Controlla se il giocatore è già in una partita (ovvero se gli è caduta la connessione e sta cercando di rientrare)
             playerInGame = checkIfPlayerInGame(player.getSupabaseUid());
             System.out.println("Player " + player.getNickname() + " is in game: " + playerInGame + "----------------------------------------------------");
+        } else if (nicknameOpzionale == null || nicknameOpzionale.isBlank()) {
+            // A new player needs a nickname: reject instead of registering a nameless account
+            player = null;
         } else {
             // --- CASO B: PRIMO ACCESSO ASSOLUTO (Nuovo Utente) ---
             player = firstLoginPlayer(nicknameOpzionale, sessionId, supabaseUid); // Questo metodo si occuperà di creare il Player e salvarlo nel DB
@@ -131,7 +145,8 @@ public class MasterController implements GameLifeCycleListener {
         }else{
             System.err.println("Errore nel login, player è null");
 
-            PlayerInfoResponse response = new PlayerInfoResponse(player.getNickname(), false);
+            // player is null here: echo the requested nickname (the client expects a string)
+            PlayerInfoResponse response = new PlayerInfoResponse(Objects.requireNonNullElse(nicknameOpzionale, ""), false);
             Message message = new Message(response, MessageType.PLAYER_INFO_RESPONSE);
 
             gameNotifications.sendMessageToClient(message, sessionId);
@@ -140,6 +155,14 @@ public class MasterController implements GameLifeCycleListener {
 
     public void addPlayerToGame(String sessionId){
         Player player = getPlayerBySession(sessionId);
+        if (player == null) {
+            System.err.println("JOIN_GAME_REQUEST ignored: session " + sessionId + " is not logged in");
+            return;
+        }
+        if (checkIfPlayerInGame(player.getSupabaseUid())) {
+            System.err.println("JOIN_GAME_REQUEST ignored: " + player.getNickname() + " is already in a game");
+            return;
+        }
 
         JoinGameResponse joinGameResponse;
         boolean isJoined = false;
@@ -184,18 +207,27 @@ public class MasterController implements GameLifeCycleListener {
 
     public void putCard(Seed seed, int value, String sessionId) {
         Player player = getPlayerBySession(sessionId);
-        String supabaseUid = player.getSupabaseUid();
-
-        GameController gameController = playerGameMap.get(supabaseUid);
+        GameController gameController = gameOf(player);
+        if (gameController == null) {
+            System.err.println("PUT_CARD ignored: session " + sessionId + " is not in a game");
+            return;
+        }
         gameController.putCard(seed, value, player.getNickname());
     }
 
     public void setBet(int bet, String sessionId) {
         Player player = getPlayerBySession(sessionId);
-        String supabaseUid = player.getSupabaseUid();
-
-        GameController gameController = playerGameMap.get(supabaseUid);
+        GameController gameController = gameOf(player);
+        if (gameController == null) {
+            System.err.println("SET_BET ignored: session " + sessionId + " is not in a game");
+            return;
+        }
         gameController.setBet(bet, player.getNickname());
+    }
+
+    // The match this player is in, or null if not logged in or not playing
+    private GameController gameOf(Player player) {
+        return player == null ? null : playerGameMap.get(player.getSupabaseUid());
     }
 
 
@@ -239,12 +271,20 @@ public class MasterController implements GameLifeCycleListener {
         return playerGameMap.containsKey(supabaseUid);
     }
 
-    public void handlePlayerDisconnection(String sessionId) {
+    /**
+     * Runs on the command loop once a socket has closed, after every command that socket had sent.
+     */
+    public void handleConnectionClosed(String sessionId) {
         Player player = getPlayerBySession(sessionId);
-        if (player != null) {
+        // Only the player's current socket opens a reconnection window: if they already reconnected on a
+        // new socket, the old one closing late must not start a timer that would kick them out.
+        if (player != null
+                && gameNotifications.isCurrentSession(player.getNickname(), sessionId)
+                && checkIfPlayerInGame(player.getSupabaseUid())) {
             player.setConnectionStatus(PlayerConnection.OFFLINE);
             onPlayerDisconnected(player.getSupabaseUid());
         }
+        gameNotifications.removeSession(sessionId);
     }
 
     /**
@@ -253,13 +293,30 @@ public class MasterController implements GameLifeCycleListener {
     private void onPlayerDisconnected(String playerUuid) {
         System.out.println("Giocatore " + playerUuid + " disconnesso. Avvio timer di grazia...");
 
-        // Programmiamo l'esecuzione del compito di "pulizia" dopo 60 secondi
-        ScheduledFuture<?> timer = scheduler.schedule(() -> {
-            finalizeDisconnection(playerUuid);
-        }, DISCONNECT_TIMEOUT, TimeUnit.SECONDS);
+        // The timer thread only enqueues the expiry: the cleanup itself runs on the command loop
+        PendingDisconnect pending = new PendingDisconnect();
+        pending.timer = scheduler.schedule(
+                () -> commandLoop.submit(() -> onDisconnectTimeout(playerUuid, pending)),
+                DISCONNECT_TIMEOUT, TimeUnit.SECONDS);
 
         // Salviamo il timer per poterlo annullare se il player torna
-        disconnectTimers.put(playerUuid, timer);
+        PendingDisconnect previous = disconnectTimers.put(playerUuid, pending);
+        if (previous != null) {
+            previous.timer.cancel(false);
+        }
+    }
+
+    private void onDisconnectTimeout(String playerUuid, PendingDisconnect pending) {
+        // The timer may have fired just before the player reconnected: then its window is already closed
+        if (!disconnectTimers.remove(playerUuid, pending)) {
+            return;
+        }
+        finalizeDisconnection(playerUuid);
+    }
+
+    // Visible for tests
+    boolean hasPendingDisconnect(String playerUuid) {
+        return disconnectTimers.containsKey(playerUuid);
     }
 
     private void handlePlayerReconnection(Player player, String sessionId) {
@@ -280,10 +337,10 @@ public class MasterController implements GameLifeCycleListener {
      * Chiamato quando il giocatore si riconnette (nella stessa partita)
      */
     private void onPlayerReconnected(String playerUuid) {
-        ScheduledFuture<?> activeTimer = disconnectTimers.remove(playerUuid);
+        PendingDisconnect pending = disconnectTimers.remove(playerUuid);
 
-        if (activeTimer != null) {
-            activeTimer.cancel(false); // Fermiamo il timer!
+        if (pending != null) {
+            pending.timer.cancel(false); // Fermiamo il timer!
             System.out.println("Bentornato " + playerUuid + "! Timer annullato.");
         }
     }
@@ -292,14 +349,18 @@ public class MasterController implements GameLifeCycleListener {
      * Azione eseguita allo scadere del timer
      */
     private void finalizeDisconnection(String playerUuid) {
-        disconnectTimers.remove(playerUuid);
+        PendingDisconnect pending = disconnectTimers.remove(playerUuid);
+        if (pending != null) {
+            pending.timer.cancel(false);
+        }
         System.out.println("Timer scaduto per " + playerUuid + ". Rimozione definitiva dalla partita.");
 
-        // QUI INSERISCI LA TUA LOGICA DI GIOCO:
-        GameController gameController = playerGameMap.get(playerUuid);
         // 1. Rimuovi il player dalla partita
-
-        playerGameMap.remove(playerUuid);
+        GameController gameController = playerGameMap.remove(playerUuid);
+        if (gameController == null) {
+            // The match already ended while the player was away
+            return;
+        }
 
         Player player = playerRepository.findBySupabaseUid(playerUuid).orElse(null);
         if(player != null) {
@@ -321,9 +382,9 @@ public class MasterController implements GameLifeCycleListener {
 
     public void logout(String clientSessionId) {
         Player player = getPlayerBySession(clientSessionId);
-        if(checkIfPlayerInGame(player.getSupabaseUid())){
+        if(player != null && checkIfPlayerInGame(player.getSupabaseUid())){
             //se il giocatore è in partita finalizzo direttamente la disconnessione senza aspettare il timer
-            finalizeDisconnection(getPlayerBySession(clientSessionId).getSupabaseUid());
+            finalizeDisconnection(player.getSupabaseUid());
         }
         gameNotifications.removeSession(clientSessionId);
     }
