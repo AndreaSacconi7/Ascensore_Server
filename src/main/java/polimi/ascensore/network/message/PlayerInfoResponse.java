@@ -17,26 +17,31 @@ public class PlayerInfoResponse implements ExecutableInClient {
 
     private final boolean needsNickname;
 
+    // True when the player has a match in progress: the table state follows (reconnection)
+    private final boolean inMatch;
+
     // One of the constants above, or null
     private final String error;
 
-    private PlayerInfoResponse(String nickname, boolean isLogged, boolean needsNickname, String error) {
+    private PlayerInfoResponse(String nickname, boolean isLogged, boolean needsNickname, boolean inMatch,
+                               String error) {
         this.nickname = nickname;
         this.isLogged = isLogged;
         this.needsNickname = needsNickname;
+        this.inMatch = inMatch;
         this.error = error;
     }
 
-    public static PlayerInfoResponse loggedIn(String nickname) {
-        return new PlayerInfoResponse(nickname, true, false, null);
+    public static PlayerInfoResponse loggedIn(String nickname, boolean inMatch) {
+        return new PlayerInfoResponse(nickname, true, false, inMatch, null);
     }
 
     public static PlayerInfoResponse rejected(String error) {
-        return new PlayerInfoResponse("", false, false, error);
+        return new PlayerInfoResponse("", false, false, false, error);
     }
 
     public static PlayerInfoResponse nicknameRequired(String error) {
-        return new PlayerInfoResponse("", false, true, error);
+        return new PlayerInfoResponse("", false, true, false, error);
     }
 
     public String getNickname() {
@@ -49,6 +54,10 @@ public class PlayerInfoResponse implements ExecutableInClient {
 
     public boolean needsNickname() {
         return needsNickname;
+    }
+
+    public boolean isInMatch() {
+        return inMatch;
     }
 
     public String getError() {

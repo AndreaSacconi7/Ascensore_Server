@@ -130,7 +130,9 @@ class GameServerIntegrationTest {
         bob.abort();
         Client bobAgain = connect();
         bobAgain.send(playerInfoRequest("uid-bob2", ""));
-        assertTrue(bobAgain.await("PLAYER_INFO_RESPONSE").get("isLogged").getAsBoolean());
+        JsonObject welcomeBack = bobAgain.await("PLAYER_INFO_RESPONSE");
+        assertTrue(welcomeBack.get("isLogged").getAsBoolean());
+        assertTrue(welcomeBack.get("inMatch").getAsBoolean());
         assertEquals(order.size(), bobAgain.await("STARTING_GAME").getAsJsonArray("connectedPlayers").size());
         assertEquals(1, bobAgain.await("HAND_UPDATE").getAsJsonArray("cards").size());
         JsonObject info = bobAgain.await("INFO_AFTER_RECONNECTION");

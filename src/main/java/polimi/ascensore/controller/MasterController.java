@@ -111,7 +111,7 @@ public class MasterController implements GameLifeCycleListener {
 
         sockets.addNicknameToSessionIdNode(player.getNickname(), sessionId);
         sockets.getSession(sessionId).getAttributes().put(SESSION_PLAYER, player);
-        reply(sessionId, PlayerInfoResponse.loggedIn(player.getNickname()));
+        reply(sessionId, PlayerInfoResponse.loggedIn(player.getNickname(), playerInGame));
 
         if (playerInGame) {
             handlePlayerReconnection(player, sessionId);

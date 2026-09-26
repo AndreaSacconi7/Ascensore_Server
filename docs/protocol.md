@@ -23,7 +23,7 @@ Envelope: `{"messageType": "...", "executable": {...}}`.
 
 | `messageType` | `executable` | Sent |
 |---|---|---|
-| `PLAYER_INFO_RESPONSE` | `nickname`, `isLogged`, `needsNickname`, `error` | Answer to `PLAYER_INFO_REQUEST`. `error` is one of `INVALID_TOKEN`, `NICKNAME_MISSING`, `NICKNAME_INVALID`, `NICKNAME_TAKEN`. With `needsNickname` the client asks the user for a nickname and repeats the request. |
+| `PLAYER_INFO_RESPONSE` | `nickname`, `isLogged`, `needsNickname`, `inMatch`, `error` | Answer to `PLAYER_INFO_REQUEST`. `inMatch` means the player has a match in progress and its table state follows. `error` is one of `INVALID_TOKEN`, `NICKNAME_MISSING`, `NICKNAME_INVALID`, `NICKNAME_TAKEN`. With `needsNickname` the client asks the user for a nickname and repeats the request. |
 | `JOIN_GAME_RESPONSE` | `nickname`, `isJoined` | Seated in a match that is waiting for players. |
 | `STARTING_GAME` | `connectedPlayers` | The match starts; players in betting order. |
 | `HAND_UPDATE` | `cards` | Your hand for the new set (to you only). |

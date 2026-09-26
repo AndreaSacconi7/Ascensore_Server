@@ -114,6 +114,6 @@ class GameWebSocketHandlerTest {
     }
 
     private static Message anyMessage() {
-        return new Message(PlayerInfoResponse.loggedIn("alice"), MessageType.PLAYER_INFO_RESPONSE);
+        return new Message(PlayerInfoResponse.loggedIn("alice", false), MessageType.PLAYER_INFO_RESPONSE);
     }
 }
