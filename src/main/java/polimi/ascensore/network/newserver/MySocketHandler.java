@@ -8,6 +8,7 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+import polimi.ascensore.controller.GameNotifier;
 import polimi.ascensore.model.GamePlayer;
 import polimi.ascensore.model.PlayerState;
 import polimi.ascensore.network.command.Command;
@@ -19,7 +20,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
-public class MySocketHandler extends TextWebSocketHandler {
+public class MySocketHandler extends TextWebSocketHandler implements GameNotifier {
 
     // Concurrent maps: sessions are added on WebSocket container threads and read by the command loop.
 
@@ -96,6 +97,7 @@ public class MySocketHandler extends TextWebSocketHandler {
         }
     }
 
+    @Override
     public void forwardUpdateToAll(Message message, List<GamePlayer> playersInGame){
 
         WebSocketMessage<String> msg = new TextMessage(message.toJson());
@@ -108,6 +110,7 @@ public class MySocketHandler extends TextWebSocketHandler {
         }
     }
 
+    @Override
     public void forwardUpdateToSingleClient(Message message, String nickname){
 
         WebSocketMessage<String> msg = new TextMessage(message.toJson());

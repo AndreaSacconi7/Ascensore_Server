@@ -6,11 +6,10 @@ import polimi.ascensore.JPA.Player;
 
 import java.util.Optional;
 
-//DAO per accedere ai dati dei giocatori nel database
 @Repository
 public interface PlayerRepository extends JpaRepository<Player, Long> {
 
-    // Trova il player basandosi sull'ID strano di Supabase (es. "a1b2-c3d4...")
     Optional<Player> findBySupabaseUid(String supabaseUid);
 
+    boolean existsByNicknameIgnoreCase(String nickname);
 }

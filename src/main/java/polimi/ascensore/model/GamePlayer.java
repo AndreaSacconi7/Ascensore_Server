@@ -43,12 +43,7 @@ public class GamePlayer {
     }*/
 
     public void updateScore() {
-        if(roundsWon == bet){
-            score = score + (10 * bet) + 10;
-        } else {
-            int diff = Math.abs(roundsWon - bet);
-            score = score - (diff * 10);
-        }
+        score = score + GameRules.setScore(bet, roundsWon);
     }
 
     public void updateRoundsWon(){

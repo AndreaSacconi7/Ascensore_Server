@@ -1,19 +1,19 @@
 package polimi.ascensore.network.message;
 
-import polimi.ascensore.model.GamePlayer;
+import java.util.Map;
 
-import java.util.HashMap;
-import java.util.List;
-
+/**
+ * Final scores, keyed by final standing (winner first).
+ */
 public class EndGame implements ExecutableInClient {
 
-    private final HashMap<String, Integer> gameResult;
+    private final Map<String, Integer> gameResult;
 
-    public EndGame(HashMap<String, Integer> gameResult) {
+    public EndGame(Map<String, Integer> gameResult) {
         this.gameResult = gameResult;
     }
 
-    public HashMap<String, Integer> getGameResult() {
+    public Map<String, Integer> getGameResult() {
         return gameResult;
     }
 }

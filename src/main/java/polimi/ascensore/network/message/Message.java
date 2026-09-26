@@ -4,34 +4,31 @@ import com.google.gson.Gson;
 
 import java.io.Serializable;
 
+/**
+ * Envelope of every server-to-client message: {"messageType": ..., "executable": {...}}.
+ */
 public class Message implements Serializable {
 
-    private ExecutableInClient executable;
+    private static final Gson GSON = new Gson();
 
-    private MessageType messageType;
-    //tale costruttore pone i messaggi direttamente a tipo COMMON_MESSAGE
+    private final ExecutableInClient executable;
 
-    /**
-     * Creates a message with the specified executable and nickname.
-     * Sets messages directly to type COMMON_MESSAGE
-     * @param executable the executable with the response to the client
-     */
-    public Message(ExecutableInClient executable, MessageType messageType){
+    private final MessageType messageType;
+
+    public Message(ExecutableInClient executable, MessageType messageType) {
         this.executable = executable;
         this.messageType = messageType;
     }
 
-    /**
-     * @return the executable of the message
-     */
-    public ExecutableInClient getExecutable(){
-        return this.executable;
+    public ExecutableInClient getExecutable() {
+        return executable;
     }
 
-    // Convert the object to JSON
+    public MessageType getMessageType() {
+        return messageType;
+    }
+
     public String toJson() {
-        Gson gson = new Gson();
-        return gson.toJson(this);
+        return GSON.toJson(this);
     }
-
 }

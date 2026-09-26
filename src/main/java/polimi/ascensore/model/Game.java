@@ -4,162 +4,141 @@ import polimi.ascensore.JPA.Player;
 import polimi.ascensore.model.exception.CannotAddPlayerNowException;
 import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
 
-import java.io.FileNotFoundException;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Random;
 
-//NOTE:
-//una partita è composta da 19 set e ogni set è composto da N round. All'interno di un round ci sono 8 turni
-//SET: partita che si conclude quando i giocatori hanno giocato tutte le carte in mano
-//ROUND = round che si conclude quando tutti i giocatori hanno giocato una carta
-//NUMTURN = turno di gioco, si conclude quando un giocatore ha giocato una carta o scomesso
-//Il gioco si conclude quando si sono eseguiti 19 round
-
+/**
+ * State of one match.
+ * <p>
+ * A match is a sequence of sets whose hand size goes 1, 2, ..., max, ..., 2, 1. Each set starts with every
+ * player betting how many tricks they will take, then one trick (round) is played per card in hand.
+ */
 public class Game {
 
-    public static int setVariation = -1;
+    private final List<GamePlayer> players;
 
-    public static final int NUM_PLAYER = 2;
+    private final int maxHandSize;
 
-    List<GamePlayer> players;
-    //Round indica la partita (per gestire carte e scommesse)
-    //numTurn indica il turno di gioco (per gestire le azioni dei giocatori)
-    private int set;
+    // 0-based index of the current set; the hand size is derived from it
+    private int setIndex;
 
+    // Tricks completed in the current set
     private int round;
 
-    private int numTurn;
+    private int betsPlaced;
 
-    private Deck deck;
+    private final Deck deck;
 
-    private TableCard tableCard;
+    private final TableCard tableCard;
 
-    public Game() {
+    public Game(int maxHandSize, Random random) {
         this.players = new ArrayList<>();
-        this.set = 1;
-        resetRound();
-        resetNumTurn();
-        this.deck = new Deck();
+        this.maxHandSize = maxHandSize;
+        this.setIndex = 0;
+        this.round = 0;
+        this.betsPlaced = 0;
+        this.deck = new Deck(random);
         this.tableCard = new TableCard();
     }
 
-    public void startGame() throws FileNotFoundException, ClassNotFoundException, InstantiationException, IllegalAccessException {
-        deck.createCardDeck();
-        tableCard.setPlayerListOrder(players);
+    public void startGame() {
+        deck.shuffleDeck();
+        tableCard.setPlayerListOrder(new ArrayList<>(players));
     }
 
+    /**
+     * Deals the hand for the current set and turns up the briscola. The peak set has no briscola card:
+     * the first card of each trick sets it (see {@link #isPeakSet()}).
+     */
     public void distributeCards() {
-        for(GamePlayer p : players) {
-            //aggiungp #set carte per ogni giocatore
-            for(int j = 0; j < set; j++)
+        for (GamePlayer p : players) {
+            for (int j = 0; j < getSet(); j++) {
                 p.addCardToHand(deck.getDeckcards().pop());
+            }
         }
-        //aggiungo la briscola tranne nel set 10
-        if(!deck.getDeckcards().isEmpty() && set != 10)
+        if (!deck.getDeckcards().isEmpty() && !isPeakSet()) {
             tableCard.setBriscola(deck.getDeckcards().pop());
-        else
+        } else {
             tableCard.setBriscola(null);
+        }
     }
 
     public void addPlayer(Player player, String sessionId) throws CannotAddPlayerNowException {
-        for( GamePlayer p : players) {
-            if(p.getPlayerState() != PlayerState.IDLE)
+        for (GamePlayer p : players) {
+            if (p.getPlayerState() != PlayerState.IDLE) {
                 throw new CannotAddPlayerNowException();
-        }
-        GamePlayer gamePlayer = new GamePlayer(player, sessionId);
-        players.add(gamePlayer);
-    }
-
-    //rimuovo giocatori disconnessi dal gioco per far continuare la partita
-    public void removePlayer(String nickname) throws PlayerNickNameDoesNotExist {
-        for(GamePlayer p : players) {
-            if(p.getNickname().equals(nickname)) {
-                players.remove(p);
-                return;
             }
         }
-        throw new PlayerNickNameDoesNotExist();
+        players.add(new GamePlayer(player, sessionId));
     }
 
-    public boolean checkIfEndGame(){
-        //ho finito ultimo set
-        return setVariation == -1 && set == 1;
+    /**
+     * The set with the largest hand, where a four-player match deals the whole deck.
+     */
+    public boolean isPeakSet() {
+        return getSet() == maxHandSize;
     }
 
-    public void updateSet() {
-        //quando arrivo a dieci devo diminuire i set anzichè aumentarli
-        if(set == 10)
-            setVariation = -1;
-
-        this.set = this.set + setVariation;
+    public boolean isLastSet() {
+        return setIndex == GameRules.totalSets(maxHandSize) - 1;
     }
 
-    public List<GamePlayer> endGame(){
-        System.out.println("Game Over");
-
-        return getResult();
+    public void nextSet() {
+        setIndex++;
+        round = 0;
+        betsPlaced = 0;
     }
 
-    private List<GamePlayer> getResult(){
-        List<GamePlayer> results = new ArrayList<>();
-        GamePlayer maxScorePlayer;
-        for(GamePlayer k : players){
-            maxScorePlayer = k;
-            for(GamePlayer p : players){
-                if(p.getScore() > maxScorePlayer.getScore() && p.getPlayerState() != PlayerState.EXIT && !results.contains(p))
-                    maxScorePlayer = p;
-            }
-            if(!results.contains(maxScorePlayer))
-                results.add(maxScorePlayer);
-        }
+    /**
+     * Number of sets already completed; used to rotate who bets first.
+     */
+    public int getSetsPlayed() {
+        return setIndex;
+    }
 
+    /**
+     * Final standing: players still in the match by descending score, then those who left.
+     */
+    public List<GamePlayer> endGame() {
+        List<GamePlayer> results = new ArrayList<>(players);
+        results.sort(Comparator
+                .comparing((GamePlayer p) -> p.getPlayerState() == PlayerState.EXIT)
+                .thenComparing(GamePlayer::getScore, Comparator.reverseOrder()));
         return results;
     }
 
     public void updateRound() {
         this.round++;
-
-        resetBriscolaInSet10();
     }
 
-    //nel turno dieci la briscola è la prima carta giocata. quindi quando finisco il round la tolgo
-    private void resetBriscolaInSet10(){
-        if(getSet() == 10){
-            getTableCard().setBriscola(null);
-        }
-    }
-
-    public void resetRound(){
-        this.round = 0;
-    }
-
-    public void updateNumTurn() {
-        this.numTurn++;
-    }
-
-    public void resetNumTurn(){
-        this.numTurn = 0;
+    public void registerBet() {
+        this.betsPlaced++;
     }
 
     public GamePlayer getPlayerByNickName(String nickname) throws PlayerNickNameDoesNotExist {
-        for(GamePlayer p : players) {
-            if(p.getNickname().equals(nickname)) {
+        for (GamePlayer p : players) {
+            if (p.getNickname().equals(nickname)) {
                 return p;
             }
         }
         throw new PlayerNickNameDoesNotExist();
     }
 
+    /**
+     * Hand size of the current set. The protocol calls this the set number.
+     */
     public int getSet() {
-        return set;
+        return GameRules.handSize(setIndex, maxHandSize);
     }
 
     public int getRound() {
         return round;
     }
 
-    public int getNumTurn() {
-        return numTurn;
+    public int getBetsPlaced() {
+        return betsPlaced;
     }
 
     public Deck getDeck() {
@@ -173,5 +152,4 @@ public class Game {
     public List<GamePlayer> getPlayers() {
         return players;
     }
-
 }

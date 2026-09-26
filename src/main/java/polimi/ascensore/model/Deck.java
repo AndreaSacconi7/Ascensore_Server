@@ -1,51 +1,39 @@
 package polimi.ascensore.model;
 
-import com.google.gson.Gson;
-
-import java.io.*;
-import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
+import java.util.Random;
 import java.util.Stack;
+import java.util.stream.IntStream;
 
+/**
+ * The 40-card Italian deck: four seeds, values 1 (ace) to 10 (king).
+ */
 public class Deck {
 
-    transient Gson gson = new Gson();
+    public static final int SIZE = 40;
 
-    private Stack<Card> deckcards;
-    //stack di carte che non viene modificato ma viene usato per ripristinare il mazzo
-    private Stack<Card> cardStack;
+    private static final List<Card> FULL_DECK = Arrays.stream(Seed.values())
+            .flatMap(seed -> IntStream.rangeClosed(1, 10).mapToObj(value -> new Card(seed, value)))
+            .toList();
 
-    public Deck() {
-        this.deckcards = new Stack<>();
-        this.cardStack = new Stack<>();
+    // Shuffling source: SecureRandom in production so deals cannot be predicted from earlier ones
+    private final Random random;
+
+    private final Stack<Card> deckcards = new Stack<>();
+
+    public Deck(Random random) {
+        this.random = random;
     }
 
-    public void createCardDeck() throws FileNotFoundException {
-        InputStream is = getClass().getResourceAsStream("/CardsFiles/Card.json");
-        if (is == null) {
-            throw new FileNotFoundException("Il file 'CardFile.json' non è stato trovato");
-        }
-        Reader reader = new InputStreamReader(is, StandardCharsets.UTF_8);
-        Card[] cardJson = gson.fromJson(reader, Card[].class);
-
-        for (Card card : cardJson) {
-            deckcards.push(card);
-            cardStack.push(card);
-        }
-
-        Collections.shuffle(deckcards);
-    }
-
-    public void shuffleDeck(){
+    /**
+     * Puts all 40 cards back and shuffles them; called before each deal.
+     */
+    public void shuffleDeck() {
         deckcards.clear();
-        deckcards.addAll(cardStack);
-        Collections.shuffle(deckcards);
-    }
-
-    //metodo chiamato quando si effettua la lettura con stream
-    private void readObject(ObjectInputStream ois) throws IOException, ClassNotFoundException {
-        ois.defaultReadObject();
-        gson = new Gson();
+        deckcards.addAll(FULL_DECK);
+        Collections.shuffle(deckcards, random);
     }
 
     public Stack<Card> getDeckcards() {
