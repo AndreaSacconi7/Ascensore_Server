@@ -133,6 +133,10 @@ public class Game {
         return GameRules.handSize(setIndex, maxHandSize);
     }
 
+    public int getMaxHandSize() {
+        return maxHandSize;
+    }
+
     public int getRound() {
         return round;
     }

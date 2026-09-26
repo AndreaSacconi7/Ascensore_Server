@@ -117,7 +117,9 @@ class GameServerIntegrationTest {
         alice.send(command("JOIN_GAME_REQUEST", "{}"));
         bob.send(command("JOIN_GAME_REQUEST", "{}"));
         List<String> order = new ArrayList<>();
-        alice.await("STARTING_GAME").getAsJsonArray("connectedPlayers").forEach(p -> order.add(p.getAsString()));
+        JsonObject start = alice.await("STARTING_GAME");
+        start.getAsJsonArray("connectedPlayers").forEach(p -> order.add(p.getAsString()));
+        assertEquals(10, start.get("maxHandSize").getAsInt());
         assertEquals(1, alice.await("HAND_UPDATE").getAsJsonArray("cards").size());
         assertEquals(1, bob.await("HAND_UPDATE").getAsJsonArray("cards").size());
 
@@ -137,6 +139,7 @@ class GameServerIntegrationTest {
         assertEquals(1, bobAgain.await("HAND_UPDATE").getAsJsonArray("cards").size());
         JsonObject info = bobAgain.await("INFO_AFTER_RECONNECTION");
         assertEquals(1, info.get("set").getAsInt());
+        assertEquals(0, info.get("setsPlayed").getAsInt());
         assertEquals(0, info.getAsJsonObject("bets").get(order.get(0)).getAsInt());
     }
 

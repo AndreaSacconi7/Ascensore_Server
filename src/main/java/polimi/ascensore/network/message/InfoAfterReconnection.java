@@ -16,6 +16,11 @@ public class InfoAfterReconnection implements ExecutableInClient {
     // Tricks already completed in the current set
     private final int round;
 
+    // Sets completed before the current one
+    private final int setsPlayed;
+
+    private final int maxHandSize;
+
     private final Map<String, Integer> scores;
 
     private final Map<String, Integer> bets;
@@ -25,10 +30,13 @@ public class InfoAfterReconnection implements ExecutableInClient {
     // Cards already on the table in the current trick, in play order
     private final Map<String, Card> playedCards;
 
-    public InfoAfterReconnection(int set, int round, Map<String, Integer> scores, Map<String, Integer> bets,
-                                 Map<String, Integer> roundsWon, Map<String, Card> playedCards) {
+    public InfoAfterReconnection(int set, int round, int setsPlayed, int maxHandSize, Map<String, Integer> scores,
+                                 Map<String, Integer> bets, Map<String, Integer> roundsWon,
+                                 Map<String, Card> playedCards) {
         this.set = set;
         this.round = round;
+        this.setsPlayed = setsPlayed;
+        this.maxHandSize = maxHandSize;
         this.scores = scores;
         this.bets = bets;
         this.roundsWon = roundsWon;

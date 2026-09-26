@@ -25,18 +25,18 @@ Envelope: `{"messageType": "...", "executable": {...}}`.
 |---|---|---|
 | `PLAYER_INFO_RESPONSE` | `nickname`, `isLogged`, `needsNickname`, `inMatch`, `error` | Answer to `PLAYER_INFO_REQUEST`. `inMatch` means the player has a match in progress and its table state follows. `error` is one of `INVALID_TOKEN`, `NICKNAME_MISSING`, `NICKNAME_INVALID`, `NICKNAME_TAKEN`. With `needsNickname` the client asks the user for a nickname and repeats the request. |
 | `JOIN_GAME_RESPONSE` | `nickname`, `isJoined` | Seated in a match that is waiting for players. |
-| `STARTING_GAME` | `connectedPlayers` | The match starts; players in betting order. |
+| `STARTING_GAME` | `connectedPlayers`, `maxHandSize` | The match starts; players in betting order. Hands go 1..`maxHandSize`..1, so the match has `2 × maxHandSize − 1` sets. |
 | `HAND_UPDATE` | `cards` | Your hand for the new set (to you only). |
 | `BRISCOLA_UPDATE` | `briscolaCard` (may be absent) | Trump card. Absent at the start of the peak set, where the card leading each trick sets it. |
 | `PLAYER_STATE_UPDATE` | `nickname`, `playerState` | `WAIT`, `BET` or `PUT`: whose turn it is and what they must do. |
 | `SETTED_BET` | `nickname`, `bet` | A bet was accepted. |
 | `PLAYED_CARD` | `nickname`, `playedCard` | A card was accepted. |
 | `END_ROUND` | `nextRoundNumber`, `nextPlayerOrderAndTaken` | A trick is over. Keys are in the play order of the next trick (winner first); values are tricks taken. |
-| `END_SET` | `nextSetNumber`, `nextPlayerOrderAndScore` | A set is over. `nextSetNumber` is the next hand size; keys are in the next betting order. |
+| `END_SET` | `nextSetNumber`, `setsPlayed`, `nextPlayerOrderAndScore` | A set is over. `nextSetNumber` is the next hand size, `setsPlayed` the sets completed so far; keys are in the next betting order. |
 | `END_GAME` | `gameResult` | Final scores, winner first. A player who left scores -500. |
 | `PLAYER_EXIT_GAME` | `nickname` | A player left the match (currently this ends the match). |
 | `TEXT_MESSAGE` | `text` | Why your last command was rejected (to you only). |
-| `INFO_AFTER_RECONNECTION` | `set`, `round`, `scores`, `bets`, `roundsWon`, `playedCards` | Table state for a player who reconnected, after `STARTING_GAME`, `BRISCOLA_UPDATE` and `HAND_UPDATE`, and before one `PLAYER_STATE_UPDATE` per player. |
+| `INFO_AFTER_RECONNECTION` | `set`, `round`, `setsPlayed`, `maxHandSize`, `scores`, `bets`, `roundsWon`, `playedCards` | Table state for a player who reconnected, after `STARTING_GAME`, `BRISCOLA_UPDATE` and `HAND_UPDATE`, and before one `PLAYER_STATE_UPDATE` per player. |
 
 Maps whose key order carries meaning (play order, standing) are sent in that order.
 

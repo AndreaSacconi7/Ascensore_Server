@@ -57,7 +57,8 @@ public class GameController {
         game.startGame();
         game.distributeCards();
 
-        broadcast(new StartingGame(nicknamesInPlayOrder()), MessageType.STARTING_GAME);
+        log.info("Match started: {} players, hands 1..{}..1", game.getPlayers().size(), game.getMaxHandSize());
+        broadcast(new StartingGame(nicknamesInPlayOrder(), game.getMaxHandSize()), MessageType.STARTING_GAME);
         notifyDistributedCards();
 
         for (GamePlayer p : game.getPlayers()) {
@@ -179,10 +180,11 @@ public class GameController {
             playedCards.put(playOrder().get(i).getNickname(), trick.get(i));
         }
 
-        sendTo(nickname, new StartingGame(nicknamesInPlayOrder()), MessageType.STARTING_GAME);
+        sendTo(nickname, new StartingGame(nicknamesInPlayOrder(), game.getMaxHandSize()), MessageType.STARTING_GAME);
         sendTo(nickname, new BriscolaUpdate(game.getTableCard().getBriscola()), MessageType.BRISCOLA_UPDATE);
         sendTo(nickname, new HandUpdate(player.getHand()), MessageType.HAND_UPDATE);
-        sendTo(nickname, new InfoAfterReconnection(game.getSet(), game.getRound(), scores, bets, roundsWon,
+        sendTo(nickname, new InfoAfterReconnection(game.getSet(), game.getRound(), game.getSetsPlayed(),
+                game.getMaxHandSize(), scores, bets, roundsWon,
                 playedCards), MessageType.INFO_AFTER_RECONNECTION);
         // Every player's state, so the client knows whose turn it is (including its own)
         for (GamePlayer p : playOrder()) {
@@ -245,7 +247,7 @@ public class GameController {
         for (GamePlayer p : playOrder()) {
             nextPlayerOrderAndScore.put(p.getNickname(), p.getScore());
         }
-        broadcast(new EndSetUpdate(game.getSet(), nextPlayerOrderAndScore), MessageType.END_SET);
+        broadcast(new EndSetUpdate(game.getSet(), game.getSetsPlayed(), nextPlayerOrderAndScore), MessageType.END_SET);
         notifyDistributedCards();
         giveTurn(playOrder().get(0), PlayerState.BET);
     }
