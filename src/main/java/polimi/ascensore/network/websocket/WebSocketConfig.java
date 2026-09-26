@@ -1,4 +1,4 @@
-package polimi.ascensore.network.newserver;
+package polimi.ascensore.network.websocket;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -11,31 +11,28 @@ import org.springframework.web.socket.server.standard.ServletServerContainerFact
 @EnableWebSocket
 public class WebSocketConfig implements WebSocketConfigurer {
 
-    // CHIEDIAMO A SPRING L'HANDLER GIÀ PRONTO
-    private final MySocketHandler mySocketHandler;
+    // The largest legitimate command is PLAYER_INFO_REQUEST, which carries a JWT of a couple of KB
+    private static final int MAX_MESSAGE_BYTES = 16 * 1024;
 
-    // Costruttore: Spring inietta l'handler qui
-    public WebSocketConfig(MySocketHandler mySocketHandler) {
-        this.mySocketHandler = mySocketHandler;
+    private final GameWebSocketHandler gameWebSocketHandler;
+
+    public WebSocketConfig(GameWebSocketHandler gameWebSocketHandler) {
+        this.gameWebSocketHandler = gameWebSocketHandler;
     }
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        // Usiamo l'istanza gestita da Spring, non una 'new'
-        registry.addHandler(mySocketHandler, "/ws")
+        // Any origin: players authenticate with a token inside the protocol, not with cookies,
+        // so another site cannot act on a player's behalf through their browser
+        registry.addHandler(gameWebSocketHandler, "/ws")
                 .setAllowedOrigins("*");
     }
 
-    //Per aumentare la dimensione del buffer
     @Bean
     public ServletServerContainerFactoryBean createWebSocketContainer() {
         ServletServerContainerFactoryBean container = new ServletServerContainerFactoryBean();
-
-        // Impostiamo il buffer a 128 KB (abbondiamo)
-        // Il default è 8192 (8KB), che con i token JWT spesso non basta.
-        container.setMaxTextMessageBufferSize(128 * 1024);
-        container.setMaxBinaryMessageBufferSize(128 * 1024);
-
+        container.setMaxTextMessageBufferSize(MAX_MESSAGE_BYTES);
+        container.setMaxBinaryMessageBufferSize(MAX_MESSAGE_BYTES);
         return container;
     }
 }

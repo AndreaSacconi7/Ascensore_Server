@@ -3,7 +3,7 @@ package polimi.ascensore.controller;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import polimi.ascensore.JPA.Player;
+import polimi.ascensore.persistence.Player;
 import polimi.ascensore.model.*;
 import polimi.ascensore.network.message.*;
 

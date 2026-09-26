@@ -2,9 +2,18 @@ package polimi.ascensore.model;
 
 public enum PlayerState {
 
-    IDLE,       //default state
-    WAIT,       //non è il suo turno
+    // In a match that has not started yet
+    IDLE,
+
+    // Someone else's turn
+    WAIT,
+
+    // Must bet
     BET,
+
+    // Must play a card
     PUT,
-    EXIT        //disconnesso
+
+    // Left the match
+    EXIT
 }

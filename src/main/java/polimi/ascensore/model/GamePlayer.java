@@ -1,6 +1,6 @@
 package polimi.ascensore.model;
 
-import polimi.ascensore.JPA.Player;
+import polimi.ascensore.persistence.Player;
 import polimi.ascensore.model.exception.InvalidCard;
 
 import java.util.ArrayList;

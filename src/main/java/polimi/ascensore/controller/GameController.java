@@ -2,7 +2,7 @@ package polimi.ascensore.controller;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import polimi.ascensore.JPA.Player;
+import polimi.ascensore.persistence.Player;
 import polimi.ascensore.model.*;
 import polimi.ascensore.model.exception.CannotAddPlayerNowException;
 import polimi.ascensore.model.exception.InvalidCard;

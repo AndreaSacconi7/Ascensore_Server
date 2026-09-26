@@ -1,48 +1,28 @@
 package polimi.ascensore.network.command;
 
-import java.io.Serializable;
+/**
+ * Envelope of every client-to-server message: {"commandType": ..., "executable": {...}}.
+ */
+public class Command {
 
-
-public class Command implements Serializable {
-
-    /**
-     * The type of the command sended by the client.
-     */
     private final CommandType commandType;
-    /**
-     * The executable inside the command.
-     */
-    private ExecutableInServer executable;
 
-    private String clientSessionId;
+    private final ExecutableInServer executable;
 
-    /**
-     * Constructs a command with the specified executable and type.
-     * @param executable the executable inside the command.
-     * @param commandType the type of the command.
-     */
-    public Command(ExecutableInServer executable, CommandType commandType){
+    public Command(ExecutableInServer executable, CommandType commandType) {
         this.executable = executable;
         this.commandType = commandType;
-        this.clientSessionId = null;
     }
 
-    /**
-     * @return the executable inside the command.
-     */
-    public ExecutableInServer getExecutable(){
-        return this.executable;
+    public ExecutableInServer getExecutable() {
+        return executable;
     }
 
-    /**
-     * @return the type of the command.
-     */
-    public CommandType getCommandType(){
-        return this.commandType;
+    public CommandType getCommandType() {
+        return commandType;
     }
 
     public void setClientSessionId(String clientSessionId) {
-        this.clientSessionId = clientSessionId;
         executable.setClientSessionId(clientSessionId);
     }
 }

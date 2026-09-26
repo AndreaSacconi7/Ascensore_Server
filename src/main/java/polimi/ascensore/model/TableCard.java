@@ -1,87 +1,41 @@
 package polimi.ascensore.model;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
+/**
+ * What is on the table: the current trick, the briscola and the order players act in.
+ */
 public class TableCard {
 
-
-    private LinkedList<Card> playedCards;
-
-    private GamePlayer winnerPlayer;
+    // Cards of the current trick, in the order they were played
+    private final List<Card> playedCards = new ArrayList<>();
 
     private Card briscola;
-    //lista che determina l'ordine di gioco dei player
 
-    private List<GamePlayer> playerListOrder;
+    // Order of play for the current trick (or of betting, at the start of a set)
+    private List<GamePlayer> playerListOrder = new ArrayList<>();
 
-    //private Player currentFirstPlayerBetting;
-
-    public TableCard() {
-        this.playedCards = new LinkedList<>();
-        this.winnerPlayer = null;
-        this.briscola = null;
-        this.playerListOrder = new ArrayList<>();
-    }
-
-    public void updatePlayerListOrder(GamePlayer winnerPlayer) {
-        List<GamePlayer> newPlayerListOrder = new ArrayList<>();
-        for(int i = 0; i < playerListOrder.size(); i++){
-            if(playerListOrder.get(i).getNickname().equals(winnerPlayer.getNickname())) {
-                //trovato winnerPlayer
-                for (int j = i; j < playerListOrder.size(); j++) {
-                    //aggiungo i player che seguono il winnerPlayer
-                    newPlayerListOrder.add(playerListOrder.get(j));
-                }
-                for (int j = 0; j < i; j++) {
-                    //aggiungo i player che precedono il winnerPlayer
-                    newPlayerListOrder.add(playerListOrder.get(j));
-                }
-                //aggiorno la lista di player con il nuovo ordine
-                setPlayerListOrder(newPlayerListOrder);
+    /**
+     * Rotates the order so that {@code first} acts first, keeping the seating order.
+     */
+    public void updatePlayerListOrder(GamePlayer first) {
+        for (int i = 0; i < playerListOrder.size(); i++) {
+            if (playerListOrder.get(i).getNickname().equals(first.getNickname())) {
+                List<GamePlayer> rotated = new ArrayList<>(playerListOrder.subList(i, playerListOrder.size()));
+                rotated.addAll(playerListOrder.subList(0, i));
+                playerListOrder = rotated;
                 return;
             }
         }
     }
 
-    public void updateWinnerPlayer(GamePlayer player) {
-        winnerPlayer = player;
-    }
-
-    //metodo che aggiorna il numero di turni vinti dal giocatore vincitore del turno
-    public void updatePlayerRoundsWon(){
-        winnerPlayer.updateRoundsWon();
-    }
-
-    /*public void setCurrentFirstPlayerBetting(){
-        for(int i = 0; i < playerListOrder.size(); i++){
-            if(playerListOrder.get(i).equals(winnerPlayer)){
-                if(i != playerListOrder.size() - 1){
-                    currentFirstPlayerBetting = playerListOrder.get(i + 1);
-                } else {
-                    currentFirstPlayerBetting = playerListOrder.get(0);
-                }
-            }
-        }
-    }
-
-    public Player getCurrentFirstPlayerBetting() {
-        return currentFirstPlayerBetting;
-    }*/
-
-    public void putCard(Card card){
-        playedCards.push(card);
-    }
-
-    public void resetPlayedCard(){
+    public void resetPlayedCard() {
         playedCards.clear();
     }
 
-    public LinkedList<Card> getPlayedCards() {
+    public List<Card> getPlayedCards() {
         return playedCards;
-    }
-
-    public GamePlayer getWinnerPlayer() {
-        return winnerPlayer;
     }
 
     public Card getBriscola() {
@@ -99,5 +53,4 @@ public class TableCard {
     public void setPlayerListOrder(List<GamePlayer> playerListOrder) {
         this.playerListOrder = playerListOrder;
     }
-
 }

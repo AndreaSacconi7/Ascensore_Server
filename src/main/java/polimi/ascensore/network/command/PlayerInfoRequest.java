@@ -1,26 +1,24 @@
 package polimi.ascensore.network.command;
 
-import polimi.ascensore.network.server.MasterServer;
+import polimi.ascensore.network.websocket.CommandDispatcher;
 
-public class PlayerInfoRequest implements ExecutableInServer{
+public class PlayerInfoRequest implements ExecutableInServer {
 
-    final String token;
-    String sessionId;
-    String nickname;
+    // Supabase access token
+    private String token;
 
-    public PlayerInfoRequest(String token, String nickname) {
-        this.token = token;
-        this.nickname = nickname;
-    }
+    // Only read when the player has no public nickname yet; empty otherwise
+    private String nickname;
 
+    private transient String clientSessionId;
 
     @Override
-    public void execute(MasterServer masterServer) {
-        masterServer.fetchPlayerInfo(sessionId, token, nickname);
+    public void execute(CommandDispatcher commandDispatcher) {
+        commandDispatcher.fetchPlayerInfo(clientSessionId, token, nickname);
     }
 
     @Override
     public void setClientSessionId(String clientSessionId) {
-        this.sessionId = clientSessionId;
+        this.clientSessionId = clientSessionId;
     }
 }

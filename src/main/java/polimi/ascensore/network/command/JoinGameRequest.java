@@ -1,19 +1,14 @@
 package polimi.ascensore.network.command;
 
-import polimi.ascensore.network.server.MasterServer;
+import polimi.ascensore.network.websocket.CommandDispatcher;
 
-public class JoinGameRequest implements ExecutableInServer{
+public class JoinGameRequest implements ExecutableInServer {
 
-    final String nickname;
-    String clientSessionId;
-
-    public JoinGameRequest(String nickname) {
-        this.nickname = nickname;
-    }
+    private transient String clientSessionId;
 
     @Override
-    public void execute(MasterServer masterServer) {
-        masterServer.joinGame(clientSessionId);
+    public void execute(CommandDispatcher commandDispatcher) {
+        commandDispatcher.joinGame(clientSessionId);
     }
 
     @Override

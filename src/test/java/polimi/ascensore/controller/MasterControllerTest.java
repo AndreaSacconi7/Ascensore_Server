@@ -4,14 +4,14 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.socket.WebSocketSession;
-import polimi.ascensore.JPA.Player;
+import polimi.ascensore.persistence.Player;
 import polimi.ascensore.model.Seed;
 import polimi.ascensore.network.message.JoinGameResponse;
 import polimi.ascensore.network.message.Message;
 import polimi.ascensore.network.message.PlayerInfoResponse;
-import polimi.ascensore.network.newserver.MySocketHandler;
-import polimi.ascensore.network.newserver.PlayerRepository;
-import polimi.ascensore.network.newserver.SupabaseAuthService;
+import polimi.ascensore.network.websocket.GameWebSocketHandler;
+import polimi.ascensore.persistence.PlayerRepository;
+import polimi.ascensore.auth.SupabaseAuthService;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -28,14 +28,14 @@ class MasterControllerTest {
 
     private CommandLoop commandLoop;
     private MasterController controller;
-    private MySocketHandler sockets;
+    private GameWebSocketHandler sockets;
     private SupabaseAuthService authService;
     private PlayerRepository playerRepository;
 
     @BeforeEach
     void setUp() {
         commandLoop = new CommandLoop();
-        sockets = mock(MySocketHandler.class);
+        sockets = mock(GameWebSocketHandler.class);
         authService = mock(SupabaseAuthService.class);
         playerRepository = mock(PlayerRepository.class);
         when(playerRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));

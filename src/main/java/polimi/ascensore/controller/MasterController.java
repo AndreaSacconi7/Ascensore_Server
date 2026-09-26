@@ -4,13 +4,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.WebSocketSession;
-import polimi.ascensore.JPA.Player;
+import polimi.ascensore.persistence.Player;
 import polimi.ascensore.model.Seed;
 import polimi.ascensore.model.exception.CannotAddPlayerNowException;
 import polimi.ascensore.network.message.*;
-import polimi.ascensore.network.newserver.MySocketHandler;
-import polimi.ascensore.network.newserver.PlayerRepository;
-import polimi.ascensore.network.newserver.SupabaseAuthService;
+import polimi.ascensore.network.websocket.GameWebSocketHandler;
+import polimi.ascensore.persistence.PlayerRepository;
+import polimi.ascensore.auth.SupabaseAuthService;
 
 import java.security.SecureRandom;
 import java.util.*;
@@ -38,7 +38,7 @@ public class MasterController implements GameLifeCycleListener {
 
     private final PlayerRepository playerRepository;
 
-    private MySocketHandler sockets;
+    private GameWebSocketHandler sockets;
 
     // Matches still waiting for players, oldest first
     private final List<GameController> openMatches = new LinkedList<>();
@@ -70,8 +70,8 @@ public class MasterController implements GameLifeCycleListener {
         this.playerRepository = playerRepository;
     }
 
-    public void setSocketHandler(MySocketHandler mySocketHandler) {
-        this.sockets = mySocketHandler;
+    public void setSocketHandler(GameWebSocketHandler gameWebSocketHandler) {
+        this.sockets = gameWebSocketHandler;
     }
 
     ///// LOGIN /////

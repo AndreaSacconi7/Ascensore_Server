@@ -1,21 +1,21 @@
 package polimi.ascensore.network.command;
 
+/**
+ * Commands a client can send. Each maps to an {@link ExecutableInServer} in the CommandDeserializer.
+ */
 public enum CommandType {
 
-    //RICORDARSI DI AGGIUNGERE IL COMMANDTYPE IN COMMAND DESERIALIZER PER FARLO FUNZIONARE
-
-    //comando di login inviato dal client per l'autenticazione e aggiungersi alla partita
-    LOGIN_COMMAND,
-    //comando di richiesta informazioni del giocatore
+    // First message on a socket: authenticates with a Supabase token (and optionally chooses a nickname)
     PLAYER_INFO_REQUEST,
-    //comando di richiesta di unirsi ad una partita
+
+    // Enter matchmaking
     JOIN_GAME_REQUEST,
-    //comando di ping inviato dal client per verificare la connessione con il server
-    PING_COMMAND,
-    //comando inviato dal client per posizionare una carta sul tavolo
-    PUT_CARD,
-    //comando inviato dal client per chiamare le prese che vuole fare
+
+    // Bet how many tricks the player will take this set
     SET_BET,
-    //logout del client
+
+    // Play a card on the table
+    PUT_CARD,
+
     LOGOUT
 }

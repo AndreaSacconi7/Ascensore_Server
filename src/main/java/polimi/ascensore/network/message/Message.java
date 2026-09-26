@@ -2,12 +2,10 @@ package polimi.ascensore.network.message;
 
 import com.google.gson.Gson;
 
-import java.io.Serializable;
-
 /**
  * Envelope of every server-to-client message: {"messageType": ..., "executable": {...}}.
  */
-public class Message implements Serializable {
+public class Message {
 
     private static final Gson GSON = new Gson();
 

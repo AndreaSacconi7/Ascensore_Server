@@ -1,8 +1,6 @@
 package polimi.ascensore.network.message;
 
 public enum MessageType {
-
-    LOGIN_RESPONSE,
     PLAYER_INFO_RESPONSE,
     JOIN_GAME_RESPONSE,
     STARTING_GAME,

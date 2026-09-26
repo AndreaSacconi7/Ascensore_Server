@@ -1,8 +1,8 @@
-package polimi.ascensore.network.newserver;
+package polimi.ascensore.persistence;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
-import polimi.ascensore.JPA.Player;
+import polimi.ascensore.persistence.Player;
 
 import java.util.Optional;
 

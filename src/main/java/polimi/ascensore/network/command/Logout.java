@@ -1,14 +1,14 @@
 package polimi.ascensore.network.command;
 
-import polimi.ascensore.network.server.MasterServer;
+import polimi.ascensore.network.websocket.CommandDispatcher;
 
-public class Logout implements ExecutableInServer{
+public class Logout implements ExecutableInServer {
 
-    String clientSessionId;
+    private transient String clientSessionId;
 
     @Override
-    public void execute(MasterServer masterServer) {
-        masterServer.logout(clientSessionId);
+    public void execute(CommandDispatcher commandDispatcher) {
+        commandDispatcher.logout(clientSessionId);
     }
 
     @Override

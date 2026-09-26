@@ -1,24 +1,19 @@
 package polimi.ascensore.network.command;
 
-import polimi.ascensore.network.server.MasterServer;
 import polimi.ascensore.model.Seed;
+import polimi.ascensore.network.websocket.CommandDispatcher;
 
-public class PutCard implements ExecutableInServer{
+public class PutCard implements ExecutableInServer {
 
-    private final Seed seed;
-    private final int value;
-    private final String nickname;
-    String clientSessionId;
+    private Seed seed;
 
-    public PutCard(Seed seed, int value, String nickname) {
-        this.seed = seed;
-        this.value = value;
-        this.nickname = nickname;
-    }
+    private int value;
+
+    private transient String clientSessionId;
 
     @Override
-    public void execute(MasterServer masterServer) {
-        masterServer.putCard(seed, value, clientSessionId);
+    public void execute(CommandDispatcher commandDispatcher) {
+        commandDispatcher.putCard(seed, value, clientSessionId);
     }
 
     @Override

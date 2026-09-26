@@ -1,8 +1,9 @@
 package polimi.ascensore.model;
 
-import java.io.Serializable;
-
-public class Card implements Serializable {
+/**
+ * A card of the Italian deck: value 1 is the ace, 8-10 are jack, knight and king.
+ */
+public class Card {
 
     private final Seed seed;
 
@@ -17,21 +18,20 @@ public class Card implements Serializable {
         return seed;
     }
 
-    //ritorna il valore numerico della carta
     public int getValue() {
-
         return value;
     }
 
-    //metodo usato per confrontare le carte tenendo conto del fatto che l'asso e il tre hanno un valore più alto del re
+    /**
+     * Strength within a seed: the ace is highest, then the three, then king down to two.
+     */
     public int getValueForComparison() {
-        //nel caso di carte speciali (asso e tre) restituisco il valore più alto rispetto al re (10)
-        if(value == 1){
+        if (value == 1) {
             return 12;
-        } else if (value == 3) {
+        }
+        if (value == 3) {
             return 11;
         }
-        //tutte carte tranne asso e tre
         return value;
     }
 }

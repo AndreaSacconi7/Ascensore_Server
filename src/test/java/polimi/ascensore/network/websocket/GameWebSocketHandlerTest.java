@@ -1,16 +1,16 @@
-package polimi.ascensore.network.newserver;
+package polimi.ascensore.network.websocket;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketMessage;
 import org.springframework.web.socket.WebSocketSession;
-import polimi.ascensore.JPA.Player;
+import polimi.ascensore.persistence.Player;
 import polimi.ascensore.model.GamePlayer;
 import polimi.ascensore.network.message.Message;
 import polimi.ascensore.network.message.MessageType;
 import polimi.ascensore.network.message.PlayerInfoResponse;
-import polimi.ascensore.network.server.MasterServer;
+import polimi.ascensore.network.websocket.CommandDispatcher;
 
 import java.io.IOException;
 import java.util.List;
@@ -21,15 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
-class MySocketHandlerTest {
+class GameWebSocketHandlerTest {
 
-    private MasterServer masterServer;
-    private MySocketHandler handler;
+    private CommandDispatcher commandDispatcher;
+    private GameWebSocketHandler handler;
 
     @BeforeEach
     void setUp() {
-        masterServer = mock(MasterServer.class);
-        handler = new MySocketHandler(masterServer);
+        commandDispatcher = mock(CommandDispatcher.class);
+        handler = new GameWebSocketHandler(commandDispatcher);
     }
 
     @Test
@@ -88,7 +88,21 @@ class MySocketHandlerTest {
 
         handler.afterConnectionClosed(session, CloseStatus.GOING_AWAY);
 
-        verify(masterServer).handleConnectionClosed("s-1");
+        verify(commandDispatcher).handleConnectionClosed("s-1");
+    }
+
+    @Test
+    void floodingSessionIsClosed() throws Exception {
+        WebSocketSession session = openSession("s-flood");
+        org.springframework.web.socket.TextMessage command =
+                new org.springframework.web.socket.TextMessage("{\"commandType\":\"JOIN_GAME_REQUEST\",\"executable\":{}}");
+
+        for (int i = 0; i < 21; i++) {
+            handler.handleTextMessage(session, command);
+        }
+
+        verify(commandDispatcher, times(20)).addCommandToList(any());
+        verify(session).close(CloseStatus.POLICY_VIOLATION);
     }
 
     private static WebSocketSession openSession(String id) throws IOException {

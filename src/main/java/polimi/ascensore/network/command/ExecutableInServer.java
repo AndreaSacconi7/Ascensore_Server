@@ -1,13 +1,14 @@
 package polimi.ascensore.network.command;
 
-import polimi.ascensore.network.server.MasterServer;
+import polimi.ascensore.network.websocket.CommandDispatcher;
 
-import java.io.Serializable;
+/**
+ * Payload of a client command. Runs on the command loop.
+ */
+public interface ExecutableInServer {
 
-public interface ExecutableInServer extends Serializable {
+    void execute(CommandDispatcher commandDispatcher);
 
-    public void execute(MasterServer masterServer);
-
-    //metodo per settare la client session id ma serve solo per connectionRequest in modo da collegare il channel al nickname
-    public void setClientSessionId(String clientSessionId);
+    // The socket the command arrived on: identifies the player, never trusted from the payload
+    void setClientSessionId(String clientSessionId);
 }

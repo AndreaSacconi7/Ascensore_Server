@@ -1,21 +1,16 @@
 package polimi.ascensore.network.command;
 
-import polimi.ascensore.network.server.MasterServer;
+import polimi.ascensore.network.websocket.CommandDispatcher;
 
-public class SetBet implements ExecutableInServer{
+public class SetBet implements ExecutableInServer {
 
-    private final int bet;
-    private final String nickname;
-    String clientSessionId;
+    private int bet;
 
-    public SetBet(int bet, String nickname) {
-        this.bet = bet;
-        this.nickname = nickname;
-    }
+    private transient String clientSessionId;
 
     @Override
-    public void execute(MasterServer masterServer) {
-        masterServer.setBet(bet, clientSessionId);
+    public void execute(CommandDispatcher commandDispatcher) {
+        commandDispatcher.setBet(bet, clientSessionId);
     }
 
     @Override

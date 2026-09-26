@@ -1,4 +1,4 @@
-package polimi.ascensore.JPA;
+package polimi.ascensore.persistence;
 
 import jakarta.persistence.*;
 
