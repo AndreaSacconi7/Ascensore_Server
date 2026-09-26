@@ -9,10 +9,14 @@ import polimi.ascensore.model.exception.InvalidCard;
 import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
 import polimi.ascensore.network.message.*;
 
+import java.time.Duration;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Runs one match: validates the players' moves against the rules, advances turns, tricks and sets,
@@ -25,6 +29,12 @@ public class GameController {
     // Final score reported for a player who left the match
     private static final int EXIT_SCORE = -500;
 
+    // Clients keep a finished trick on screen this long before showing the next turn: added to that turn
+    static final Duration RESULT_DISPLAY = Duration.ofSeconds(3);
+
+    // A player whose turns time out this many times in a row is taken out of the match
+    static final int MAX_TIMEOUTS_IN_A_ROW = 3;
+
     private final Game game;
 
     private final GameNotifier notifier;
@@ -34,12 +44,29 @@ public class GameController {
     // Players needed to start: the match starts as soon as it is full
     private final int playersPerMatch;
 
+    private final TurnClock clock;
+
+    // Time to bet or play; zero disables the limit
+    private final Duration turnTime;
+
+    // Identifies the current turn, so a deadline that fires after the player acted is ignored
+    private int turnSeq;
+
+    private Runnable cancelTurnTimer = () -> { };
+
+    private long turnDeadlineNanos;
+
+    // nickname -> turns that timed out in a row
+    private final Map<String, Integer> timeoutsInARow = new HashMap<>();
+
     public GameController(GameLifeCycleListener gameLifeCycleListener, GameNotifier notifier,
-                          int playersPerMatch, int maxHandSize, Random random) {
+                          int playersPerMatch, int maxHandSize, Random random, TurnClock clock, Duration turnTime) {
         this.game = new Game(maxHandSize, random);
         this.notifier = notifier;
         this.gameLifeCycleListener = gameLifeCycleListener;
         this.playersPerMatch = playersPerMatch;
+        this.clock = clock;
+        this.turnTime = turnTime;
     }
 
     public int getPlayersPerMatch() {
@@ -89,22 +116,29 @@ public class GameController {
     }
 
     public void setBet(int bet, String nickname) {
+        setBet(bet, nickname, false);
+    }
+
+    private void setBet(int bet, String nickname, boolean automatic) {
         GamePlayer player = findPlayer(nickname);
         if (player == null) {
             return;
         }
         if (player.getPlayerState() != PlayerState.BET) {
-            notifyError(nickname, "It is not your turn to bet");
+            notifyError(nickname, "Non è il tuo turno di scommettere");
             return;
         }
         boolean isLastBettor = game.getBetsPlaced() == game.getPlayers().size() - 1;
         int otherBetsTotal = game.getPlayers().stream().mapToInt(GamePlayer::getBet).sum();
         if (!GameRules.isValidBet(bet, game.getSet(), isLastBettor, otherBetsTotal)) {
-            notifyError(nickname, "Invalid bet: bets go from 0 to " + game.getSet()
-                    + " and the last bet cannot make the total equal the number of tricks");
+            notifyError(nickname, "Scommessa non valida: da 0 a " + game.getSet()
+                    + ", e l'ultimo non può rendere il totale uguale alle carte in mano");
             return;
         }
 
+        if (!automatic) {
+            timeoutsInARow.remove(nickname);
+        }
         player.updateBet(bet);
         game.registerBet();
         broadcast(new SettedBetUpdate(nickname, bet), MessageType.SETTED_BET);
@@ -122,12 +156,16 @@ public class GameController {
     }
 
     public void putCard(Seed seed, int value, String nickname) {
+        putCard(seed, value, nickname, false);
+    }
+
+    private void putCard(Seed seed, int value, String nickname, boolean automatic) {
         GamePlayer player = findPlayer(nickname);
         if (player == null) {
             return;
         }
         if (player.getPlayerState() != PlayerState.PUT) {
-            notifyError(nickname, "It is not your turn to play");
+            notifyError(nickname, "Non è il tuo turno");
             return;
         }
         Card card = player.getHand().stream()
@@ -135,16 +173,19 @@ public class GameController {
                 .findFirst()
                 .orElse(null);
         if (card == null) {
-            notifyError(nickname, "You do not have that card");
+            notifyError(nickname, "Non hai questa carta");
             return;
         }
         List<Card> trick = game.getTableCard().getPlayedCards();
         Card leadCard = trick.isEmpty() ? null : trick.get(0);
         if (!GameRules.isValidCard(card, player.getHand(), leadCard)) {
-            notifyError(nickname, "You must follow the seed of the first card played");
+            notifyError(nickname, "Devi rispondere al seme della prima carta");
             return;
         }
 
+        if (!automatic) {
+            timeoutsInARow.remove(nickname);
+        }
         if (leadCard == null && game.isPeakSet()) {
             // Peak set: no briscola was dealt, the card leading each trick sets it
             game.getTableCard().setBriscola(card);
@@ -247,10 +288,10 @@ public class GameController {
         sendTo(nickname, new InfoAfterReconnection(game.getSet(), game.getRound(), game.getSetsPlayed(),
                 game.getMaxHandSize(), scores, bets, roundsWon,
                 playedCards), MessageType.INFO_AFTER_RECONNECTION);
-        // Every player's state, so the client knows whose turn it is (including its own)
+        // Every player's state, so the client knows whose turn it is (including its own) and how long is left
         for (GamePlayer p : playOrder()) {
-            sendTo(nickname, new PlayerStateUpdate(p.getPlayerState(), p.getNickname()),
-                    MessageType.PLAYER_STATE_UPDATE);
+            sendTo(nickname, new PlayerStateUpdate(p.getPlayerState(), p.getNickname(), turnMillisLeft(p),
+                    turnTime.toMillis()), MessageType.PLAYER_STATE_UPDATE);
         }
     }
 
@@ -280,7 +321,7 @@ public class GameController {
             nextPlayerOrderAndTaken.put(p.getNickname(), p.getRoundsWon());
         }
         broadcast(new EndRoundUpdate(game.getRound(), nextPlayerOrderAndTaken), MessageType.END_ROUND);
-        giveTurn(playOrder().get(0), PlayerState.PUT);
+        giveTurn(playOrder().get(0), PlayerState.PUT, RESULT_DISPLAY);
     }
 
     private void completeSet() {
@@ -310,10 +351,11 @@ public class GameController {
         }
         broadcast(new EndSetUpdate(game.getSet(), game.getSetsPlayed(), nextPlayerOrderAndScore), MessageType.END_SET);
         notifyDistributedCards();
-        giveTurn(playOrder().get(0), PlayerState.BET);
+        giveTurn(playOrder().get(0), PlayerState.BET, RESULT_DISPLAY);
     }
 
     private void endGameResult() {
+        cancelTurnTimer.run();
         Map<String, Integer> resultAndScore = new LinkedHashMap<>();
         for (GamePlayer p : game.endGame()) {
             resultAndScore.put(p.getNickname(), p.getPlayerState() == PlayerState.EXIT ? EXIT_SCORE : p.getScore());
@@ -332,8 +374,86 @@ public class GameController {
     }
 
     private void giveTurn(GamePlayer player, PlayerState state) {
+        giveTurn(player, state, Duration.ZERO);
+    }
+
+    // [extra] covers the time clients spend showing the previous trick before this turn appears
+    private void giveTurn(GamePlayer player, PlayerState state, Duration extra) {
         player.updateState(state);
-        broadcast(new PlayerStateUpdate(state, player.getNickname()), MessageType.PLAYER_STATE_UPDATE);
+        cancelTurnTimer.run();
+        int seq = ++turnSeq;
+        long millisLeft = 0;
+        if (!turnTime.isZero()) {
+            Duration limit = turnTime.plus(extra);
+            millisLeft = limit.toMillis();
+            turnDeadlineNanos = System.nanoTime() + limit.toNanos();
+            String nickname = player.getNickname();
+            cancelTurnTimer = clock.schedule(limit, () -> onTurnTimeout(seq, nickname));
+        }
+        broadcast(new PlayerStateUpdate(state, player.getNickname(), millisLeft, turnTime.toMillis()),
+                MessageType.PLAYER_STATE_UPDATE);
+    }
+
+    /**
+     * The player on turn ran out of time: the server bets or plays for them (the lowest valid bet, the
+     * weakest valid card). After too many timeouts in a row they are taken out, so an absent player
+     * cannot hold the match hostage.
+     */
+    private void onTurnTimeout(int seq, String nickname) {
+        GamePlayer player = findPlayer(nickname);
+        if (seq != turnSeq || player == null) {
+            return;
+        }
+        int timeouts = timeoutsInARow.merge(nickname, 1, Integer::sum);
+        if (timeouts >= MAX_TIMEOUTS_IN_A_ROW) {
+            log.info("{} let {} turns in a row time out, removing them", nickname, timeouts);
+            String supabaseUid = player.getSupabaseId();
+            // Tell the player first: once removed they no longer receive the match's messages
+            sendTo(nickname, new PlayerExitGame(nickname), MessageType.PLAYER_EXIT_GAME);
+            playerExitGame(nickname);
+            gameLifeCycleListener.onPlayerRemoved(this, supabaseUid);
+            return;
+        }
+        if (player.getPlayerState() == PlayerState.BET) {
+            int bet = lowestValidBet(player);
+            notifyError(nickname, "Tempo scaduto: ho scommesso " + bet + " per te");
+            setBet(bet, nickname, true);
+        } else if (player.getPlayerState() == PlayerState.PUT) {
+            Card card = weakestValidCard(player);
+            notifyError(nickname, "Tempo scaduto: ho giocato una carta per te");
+            putCard(card.getSeed(), card.getValue(), nickname, true);
+        }
+    }
+
+    private int lowestValidBet(GamePlayer player) {
+        boolean isLastBettor = game.getBetsPlaced() == game.getPlayers().size() - 1;
+        int otherBetsTotal = game.getPlayers().stream().mapToInt(GamePlayer::getBet).sum();
+        for (int bet = 0; bet <= game.getSet(); bet++) {
+            if (GameRules.isValidBet(bet, game.getSet(), isLastBettor, otherBetsTotal)) {
+                return bet;
+            }
+        }
+        throw new IllegalStateException("No valid bet for " + player.getNickname());
+    }
+
+    // Least likely to take the trick: not a briscola if possible, then the lowest strength
+    private Card weakestValidCard(GamePlayer player) {
+        List<Card> trick = game.getTableCard().getPlayedCards();
+        Card lead = trick.isEmpty() ? null : trick.get(0);
+        Card briscola = game.getTableCard().getBriscola();
+        return player.getHand().stream()
+                .filter(c -> GameRules.isValidCard(c, player.getHand(), lead))
+                .min(Comparator.comparing((Card c) -> briscola != null && c.getSeed() == briscola.getSeed())
+                        .thenComparing(Card::getValueForComparison))
+                .orElseThrow();
+    }
+
+    private long turnMillisLeft(GamePlayer player) {
+        boolean onTurn = player.getPlayerState() == PlayerState.BET || player.getPlayerState() == PlayerState.PUT;
+        if (!onTurn || turnTime.isZero()) {
+            return 0;
+        }
+        return Math.max(0, TimeUnit.NANOSECONDS.toMillis(turnDeadlineNanos - System.nanoTime()));
     }
 
     private void endTurn(GamePlayer player) {

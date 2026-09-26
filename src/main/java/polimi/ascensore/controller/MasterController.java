@@ -3,6 +3,7 @@ package polimi.ascensore.controller;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
 import polimi.ascensore.persistence.Player;
 import polimi.ascensore.model.Seed;
@@ -13,6 +14,7 @@ import polimi.ascensore.persistence.PlayerRepository;
 import polimi.ascensore.auth.SupabaseAuthService;
 
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -29,6 +31,8 @@ public class MasterController implements GameLifeCycleListener {
     private static final int DISCONNECT_TIMEOUT_SECONDS = 60;
 
     private static final String SESSION_PLAYER = "PLAYER";
+
+    private static final CloseStatus SESSION_REPLACED_STATUS = new CloseStatus(4001, "Logged in on another device");
 
     private final CommandLoop commandLoop;
 
@@ -56,6 +60,8 @@ public class MasterController implements GameLifeCycleListener {
     });
 
     private final Random random = new SecureRandom();
+
+
 
     // One reconnection window. Compared by identity, so a timer that fired late cannot close a newer window.
     private static final class PendingDisconnect {
@@ -109,6 +115,7 @@ public class MasterController implements GameLifeCycleListener {
             player = playerRepository.save(player);
         }
 
+        replaceOtherSession(player, sessionId);
         sockets.addNicknameToSessionIdNode(player.getNickname(), sessionId);
         sockets.getSession(sessionId).getAttributes().put(SESSION_PLAYER, player);
         reply(sessionId, PlayerInfoResponse.loggedIn(player.getNickname(), playerInGame));
@@ -116,6 +123,22 @@ public class MasterController implements GameLifeCycleListener {
         if (playerInGame) {
             handlePlayerReconnection(player, sessionId);
         }
+    }
+
+    // One account, one device: logging in again closes the socket the player was using until now
+    private void replaceOtherSession(Player player, String newSessionId) {
+        String oldSessionId = sockets.currentSessionOf(player.getNickname());
+        if (oldSessionId == null || oldSessionId.equals(newSessionId)) {
+            return;
+        }
+        log.info("{} logged in on another device, closing session {}", player.getNickname(), oldSessionId);
+        WebSocketSession old = sockets.getSession(oldSessionId);
+        if (old != null) {
+            // Commands still in flight from the old socket are ignored from now on
+            old.getAttributes().remove(SESSION_PLAYER);
+        }
+        sockets.sendMessageToClient(new Message(new SessionReplaced(), MessageType.SESSION_REPLACED), oldSessionId);
+        sockets.closeSession(oldSessionId, SESSION_REPLACED_STATUS);
     }
 
     // Why this nickname cannot be used, or null if it can
@@ -201,7 +224,8 @@ public class MasterController implements GameLifeCycleListener {
                 it.remove();
             }
         }
-        GameController match = new GameController(this, sockets, size, settings.maxHandSize(), random);
+        GameController match = new GameController(this, sockets, size, settings.maxHandSize(), random,
+                this::scheduleOnLoop, settings.turnTime());
         openMatches.add(match);
         try {
             match.addPlayerToGame(player, sessionId);
@@ -238,6 +262,18 @@ public class MasterController implements GameLifeCycleListener {
 
     public boolean checkIfPlayerInGame(String supabaseUid) {
         return playerGameMap.containsKey(supabaseUid);
+    }
+
+    // Turn deadlines: fire on the scheduler thread, run on the command loop
+    private Runnable scheduleOnLoop(Duration delay, Runnable action) {
+        ScheduledFuture<?> timer = scheduler.schedule(() -> commandLoop.submit(action), delay.toMillis(),
+                TimeUnit.MILLISECONDS);
+        return () -> timer.cancel(false);
+    }
+
+    @Override
+    public void onPlayerRemoved(GameController gameController, String supabaseUid) {
+        playerGameMap.remove(supabaseUid, gameController);
     }
 
     @Override

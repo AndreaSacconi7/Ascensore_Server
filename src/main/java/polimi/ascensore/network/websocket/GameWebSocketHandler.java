@@ -4,29 +4,43 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketMessage;
 import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 import polimi.ascensore.controller.GameNotifier;
 import polimi.ascensore.model.GamePlayer;
 import polimi.ascensore.model.PlayerState;
 import polimi.ascensore.network.command.Command;
+import polimi.ascensore.network.command.CommandType;
 import polimi.ascensore.network.message.Message;
+import polimi.ascensore.network.message.MessageType;
+import polimi.ascensore.network.message.Pong;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 /**
  * The WebSocket endpoint. Parses incoming commands and hands them to the {@link CommandDispatcher};
  * delivers outgoing messages to players' sessions.
  * <p>
- * Callbacks run on the container's threads, sends run on the command loop, hence the concurrent maps.
+ * Callbacks run on the container's threads, sends run on the command loop (and PONGs on the container
+ * threads), hence the concurrent maps and the thread-safe session wrapper.
+ * <p>
+ * Heartbeat: clients send PING every few seconds. A session silent for longer than the idle timeout is a
+ * dead connection the network never reported (phone in a pocket, Wi-Fi gone), and is closed, which starts
+ * the normal reconnection window.
  */
 @Component
 public class GameWebSocketHandler extends TextWebSocketHandler implements GameNotifier {
@@ -37,6 +51,13 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
     private static final int MAX_COMMANDS_PER_WINDOW = 20;
     private static final long WINDOW_NANOS = TimeUnit.SECONDS.toNanos(5);
 
+    // A slow client gets its messages buffered up to these limits, then its session is closed, instead of
+    // blocking the command loop in a socket write
+    private static final int SEND_TIME_LIMIT_MS = 5_000;
+    private static final int SEND_BUFFER_LIMIT_BYTES = 256 * 1024;
+
+    private static final String PONG = new Message(new Pong(), MessageType.PONG).toJson();
+
     // sessionId -> session
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
 
@@ -45,6 +66,17 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
 
     // sessionId -> commands received in the current rate window
     private final Map<String, RateWindow> rates = new ConcurrentHashMap<>();
+
+    // sessionId -> System.nanoTime() of the last message received
+    private final Map<String, Long> lastSeen = new ConcurrentHashMap<>();
+
+    private final long idleTimeoutNanos;
+
+    private final ScheduledExecutorService idleSweeper = Executors.newSingleThreadScheduledExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "idle-sessions");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private final CommandDispatcher commandDispatcher;
 
@@ -57,9 +89,32 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
         private int count;
     }
 
-    public GameWebSocketHandler(CommandDispatcher commandDispatcher) {
+    public GameWebSocketHandler(CommandDispatcher commandDispatcher,
+                                @Value("${ascensore.idle-timeout-seconds:30}") long idleTimeoutSeconds) {
         this.commandDispatcher = commandDispatcher;
+        this.idleTimeoutNanos = TimeUnit.SECONDS.toNanos(idleTimeoutSeconds);
         commandDispatcher.setSocketHandler(this);
+    }
+
+    @PostConstruct
+    void startIdleSweeper() {
+        idleSweeper.scheduleWithFixedDelay(() -> closeIdleSessions(System.nanoTime()), 5, 5, TimeUnit.SECONDS);
+    }
+
+    @PreDestroy
+    void stopIdleSweeper() {
+        idleSweeper.shutdownNow();
+    }
+
+    // Visible for tests
+    void closeIdleSessions(long now) {
+        lastSeen.forEach((sessionId, seen) -> {
+            if (now - seen > idleTimeoutNanos) {
+                log.info("Session {} silent for too long, closing it", sessionId);
+                lastSeen.remove(sessionId);
+                closeSession(sessionId, CloseStatus.SESSION_NOT_RELIABLE);
+            }
+        });
     }
 
     @Override
@@ -70,8 +125,13 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
             session.close(CloseStatus.POLICY_VIOLATION);
             return;
         }
+        lastSeen.put(session.getId(), System.nanoTime());
         try {
             Command command = gson.fromJson(message.getPayload(), Command.class);
+            if (command.getCommandType() == CommandType.PING) {
+                send(getSession(session.getId()), new TextMessage(PONG), session.getId());
+                return;
+            }
             // Payloads are not logged: PLAYER_INFO_REQUEST carries the player's access token
             log.debug("Received {} from {}", command.getCommandType(), session.getId());
             command.setClientSessionId(session.getId());
@@ -95,13 +155,16 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
-        sessions.put(session.getId(), session);
+        sessions.put(session.getId(),
+                new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT_MS, SEND_BUFFER_LIMIT_BYTES));
+        lastSeen.put(session.getId(), System.nanoTime());
         log.debug("Connection opened: {}", session.getId());
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         rates.remove(session.getId());
+        lastSeen.remove(session.getId());
         // Game-side cleanup (reconnection timer, session removal) runs on the command loop
         commandDispatcher.handleConnectionClosed(session.getId());
         log.debug("Connection closed: {} ({})", session.getId(), status);
@@ -151,7 +214,8 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
         }
         try {
             session.sendMessage(msg);
-        } catch (IOException | IllegalStateException e) {
+        } catch (IOException | RuntimeException e) {
+            // Includes a client too slow to keep up: the session wrapper closes it
             log.warn("Could not send to {}: {}", recipient, e.getMessage());
         }
     }
@@ -166,6 +230,25 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
      */
     public boolean isCurrentSession(String nickname, String sessionId) {
         return nickname != null && sessionId.equals(nicknameToSessionId.get(nickname));
+    }
+
+    /**
+     * The socket the player is currently using, or null.
+     */
+    public String currentSessionOf(String nickname) {
+        return nickname == null ? null : nicknameToSessionId.get(nickname);
+    }
+
+    public void closeSession(String sessionId, CloseStatus status) {
+        WebSocketSession session = getSession(sessionId);
+        if (session == null || !session.isOpen()) {
+            return;
+        }
+        try {
+            session.close(status);
+        } catch (IOException e) {
+            log.warn("Could not close session {}: {}", sessionId, e.getMessage());
+        }
     }
 
     public WebSocketSession getSession(String sessionId) {

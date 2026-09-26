@@ -20,5 +20,8 @@ public enum CommandType {
     // Play a card on the table
     PUT_CARD,
 
-    LOGOUT
+    LOGOUT,
+
+    // Heartbeat, every few seconds while connected
+    PING
 }

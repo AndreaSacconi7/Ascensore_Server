@@ -43,7 +43,7 @@ class MasterControllerTest {
         playerRepository = mock(PlayerRepository.class);
         when(playerRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(sockets.isCurrentSession(anyString(), anyString())).thenReturn(true);
-        controller = new MasterController(commandLoop, new GameSettings(2, 10), authService, playerRepository);
+        controller = new MasterController(commandLoop, new GameSettings(2, 10, 30), authService, playerRepository);
         controller.setSocketHandler(sockets);
     }
 
@@ -138,6 +138,24 @@ class MasterControllerTest {
         controller.fetchPlayerInfo("s-1", "token", "alice");
         assertEquals("alice", legacy.getNickname());
         verify(playerRepository).save(legacy);
+    }
+
+    @Test
+    void loggingInOnAnotherDeviceClosesTheFirstOne() {
+        Player alice = new Player("uid-alice", "alice");
+        Map<String, Object> oldAttributes = session("s-phone");
+        oldAttributes.put("PLAYER", alice);
+        when(sockets.currentSessionOf("alice")).thenReturn("s-phone");
+        when(authService.validateAndGetUserId("token")).thenReturn("uid-alice");
+        when(playerRepository.findBySupabaseUid("uid-alice")).thenReturn(Optional.of(alice));
+        session("s-laptop");
+
+        controller.fetchPlayerInfo("s-laptop", "token", "");
+
+        verify(sockets).sendMessageToClient(argThat(m -> m.getMessageType() == MessageType.SESSION_REPLACED), eq("s-phone"));
+        verify(sockets).closeSession(eq("s-phone"), any());
+        assertNull(controller.getPlayerBySession("s-phone"), "late commands from the old device are ignored");
+        assertEquals(alice, controller.getPlayerBySession("s-laptop"));
     }
 
     ///// Matchmaking /////

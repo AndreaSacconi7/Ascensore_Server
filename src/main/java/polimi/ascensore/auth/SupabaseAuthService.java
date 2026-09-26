@@ -14,6 +14,10 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigInteger;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.security.AlgorithmParameters;
 import java.security.Key;
 import java.security.KeyFactory;
@@ -22,6 +26,7 @@ import java.security.spec.ECGenParameterSpec;
 import java.security.spec.ECParameterSpec;
 import java.security.spec.ECPoint;
 import java.security.spec.ECPublicKeySpec;
+import java.time.Duration;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -38,6 +43,10 @@ public class SupabaseAuthService {
 
     // A token signed with an unknown key triggers a refetch (key rotation), at most this often
     private static final long MIN_REFRESH_INTERVAL_NANOS = TimeUnit.MINUTES.toNanos(1);
+
+    private static final Duration FETCH_TIMEOUT = Duration.ofSeconds(3);
+
+    private final HttpClient http = HttpClient.newBuilder().connectTimeout(FETCH_TIMEOUT).build();
 
     private final String jwksUrl;
 
@@ -112,7 +121,7 @@ public class SupabaseAuthService {
     }
 
     private Map<String, PublicKey> fetchKeys() throws Exception {
-        JsonNode root = new ObjectMapper().readTree(URI.create(jwksUrl).toURL());
+        JsonNode root = new ObjectMapper().readTree(readJwks());
         Map<String, PublicKey> fetched = new HashMap<>();
         for (JsonNode key : root.get("keys")) {
             if ("EC".equals(key.path("kty").asText()) && "P-256".equals(key.path("crv").asText())) {
@@ -120,6 +129,27 @@ public class SupabaseAuthService {
             }
         }
         return Map.copyOf(fetched);
+    }
+
+    /**
+     * Downloads the key set with connect and read timeouts: the fetch can run on the command loop (first
+     * login, key rotation), and an unresponsive endpoint must not stall every match.
+     */
+    private String readJwks() throws Exception {
+        URI uri = URI.create(jwksUrl);
+        if (!"http".equals(uri.getScheme()) && !"https".equals(uri.getScheme())) {
+            // Local key file (tests)
+            try (var in = uri.toURL().openStream()) {
+                return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            }
+        }
+        HttpResponse<String> response = http.send(
+                HttpRequest.newBuilder(uri).timeout(FETCH_TIMEOUT).GET().build(),
+                HttpResponse.BodyHandlers.ofString());
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException("HTTP " + response.statusCode());
+        }
+        return response.body();
     }
 
     // Builds a P-256 public key from the JWK's base64url-encoded curve point

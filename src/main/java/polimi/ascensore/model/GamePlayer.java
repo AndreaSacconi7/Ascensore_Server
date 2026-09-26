@@ -80,6 +80,10 @@ public class GamePlayer {
         this.bet = 0;
     }
 
+    public String getSupabaseId() {
+        return supabaseId;
+    }
+
     public String getNickname() {
         return nickname;
     }

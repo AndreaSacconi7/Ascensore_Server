@@ -7,6 +7,7 @@ import polimi.ascensore.persistence.Player;
 import polimi.ascensore.model.*;
 import polimi.ascensore.network.message.*;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -42,17 +43,49 @@ class GameControllerTest {
     private static final class Listener implements GameLifeCycleListener {
         int endedMatches = 0;
 
+        final List<String> removed = new ArrayList<>();
+
         @Override
         public void onGameEnded(GameController gameController) {
             endedMatches++;
+        }
+
+        @Override
+        public void onPlayerRemoved(GameController gameController, String supabaseUid) {
+            removed.add(supabaseUid);
+        }
+    }
+
+    /** Keeps scheduled turn deadlines; a test fires them when it wants time to run out. */
+    private static final class FakeClock implements TurnClock {
+        final List<Runnable> actions = new ArrayList<>();
+        final List<Duration> delays = new ArrayList<>();
+        final List<boolean[]> cancelled = new ArrayList<>();
+
+        @Override
+        public Runnable schedule(Duration delay, Runnable action) {
+            boolean[] flag = {false};
+            actions.add(action);
+            delays.add(delay);
+            cancelled.add(flag);
+            return () -> flag[0] = true;
+        }
+
+        // The deadline of the current turn expires
+        void expireCurrentTurn() {
+            int last = actions.size() - 1;
+            assertFalse(cancelled.get(last)[0], "the current turn's deadline was cancelled");
+            actions.get(last).run();
         }
     }
 
     private final RecordingNotifier notifier = new RecordingNotifier();
     private final Listener listener = new Listener();
+    private final FakeClock clock = new FakeClock();
 
     private GameController startMatch(int players, int maxHandSize) throws Exception {
-        GameController controller = new GameController(listener, notifier, players, maxHandSize, new Random(42));
+        GameController controller = new GameController(listener, notifier, players, maxHandSize, new Random(42),
+                clock, Duration.ofSeconds(30));
         for (int i = 0; i < players; i++) {
             controller.addPlayerToGame(new Player("uid-" + i, "player" + i), "session-" + i);
         }
@@ -229,6 +262,109 @@ class GameControllerTest {
                     .getExecutable()).getGameResult();
             assertEquals(players, result.size(), "everyone appears in the final standing");
         }
+    }
+
+    ///// Turn time limit /////
+
+    @Test
+    void aTurnCarriesItsDeadline() throws Exception {
+        startMatch(2, 10);
+
+        PlayerStateUpdate bet = (PlayerStateUpdate) notifier.broadcasts.stream()
+                .filter(m -> m.getExecutable() instanceof PlayerStateUpdate u && u.getPlayerState() == PlayerState.BET)
+                .reduce((a, b) -> b).orElseThrow().getExecutable();
+        assertEquals(30_000, bet.getTurnMillisLeft());
+    }
+
+    @Test
+    void whenTimeRunsOutTheServerBetsForThePlayer() throws Exception {
+        GameController controller = startMatch(3, 10);
+        Game game = controller.getGame();
+        GamePlayer bettor = active(game);
+
+        clock.expireCurrentTurn();
+
+        assertEquals(1, game.getBetsPlaced());
+        assertEquals(0, bettor.getBet(), "the lowest valid bet");
+        assertNotSame(bettor, active(game));
+    }
+
+    @Test
+    void whenTimeRunsOutTheServerPlaysTheWeakestValidCard() throws Exception {
+        GameController controller = startMatch(2, 10);
+        Game game = controller.getGame();
+        playUntil(controller, game, () -> active(game).getPlayerState() == PlayerState.PUT);
+        GamePlayer player = active(game);
+        Card only = player.getHand().get(0);
+
+        clock.expireCurrentTurn();
+
+        assertEquals(List.of(only), game.getTableCard().getPlayedCards());
+    }
+
+    @Test
+    void aDeadlineThatFiresAfterThePlayerActedIsIgnored() throws Exception {
+        GameController controller = startMatch(3, 10);
+        Game game = controller.getGame();
+        Runnable firstDeadline = clock.actions.get(clock.actions.size() - 1);
+        controller.setBet(0, active(game).getNickname());
+        GamePlayer second = active(game);
+
+        firstDeadline.run();
+
+        assertEquals(1, game.getBetsPlaced());
+        assertSame(second, active(game));
+    }
+
+    @Test
+    void theTurnAfterATrickGetsExtraTimeForTheTrickOnScreen() throws Exception {
+        GameController controller = startMatch(2, 10);
+        Game game = controller.getGame();
+        // Set 1 has one trick: once it is complete the next turn is the first bet of set 2
+        playUntil(controller, game, () -> game.getSetsPlayed() == 1);
+
+        assertEquals(Duration.ofSeconds(33), clock.delays.get(clock.delays.size() - 1));
+    }
+
+    @Test
+    void aPlayerWhoKeepsTimingOutIsTakenOut() throws Exception {
+        GameController controller = startMatch(3, 10);
+        Game game = controller.getGame();
+        GamePlayer absent = active(game);
+
+        // The others play normally; every turn of the absent player runs out
+        int timeouts = 0;
+        while (timeouts < GameController.MAX_TIMEOUTS_IN_A_ROW) {
+            GamePlayer actor = active(game);
+            if (actor == absent) {
+                clock.expireCurrentTurn();
+                timeouts++;
+            } else if (actor.getPlayerState() == PlayerState.BET) {
+                controller.setBet(validBet(game), actor.getNickname());
+            } else {
+                Card card = validCard(game, actor);
+                controller.putCard(card.getSeed(), card.getValue(), actor.getNickname());
+            }
+        }
+
+        assertFalse(game.getPlayers().contains(absent));
+        assertEquals(List.of(absent.getSupabaseId()), listener.removed);
+        assertTrue(notifier.direct.stream().anyMatch(m -> m.getMessageType() == MessageType.PLAYER_EXIT_GAME),
+                "the removed player is told");
+        assertEquals(0, listener.endedMatches, "two players remain");
+    }
+
+    private void playUntil(GameController controller, Game game, java.util.function.BooleanSupplier done) {
+        for (int step = 0; step < 10_000 && !done.getAsBoolean(); step++) {
+            GamePlayer actor = active(game);
+            if (actor.getPlayerState() == PlayerState.BET) {
+                controller.setBet(validBet(game), actor.getNickname());
+            } else {
+                Card card = validCard(game, actor);
+                controller.putCard(card.getSeed(), card.getValue(), actor.getNickname());
+            }
+        }
+        assertTrue(done.getAsBoolean());
     }
 
     // Plays valid moves until the current trick holds the given number of cards

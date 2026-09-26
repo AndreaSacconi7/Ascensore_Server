@@ -29,7 +29,7 @@ class GameWebSocketHandlerTest {
     @BeforeEach
     void setUp() {
         commandDispatcher = mock(CommandDispatcher.class);
-        handler = new GameWebSocketHandler(commandDispatcher);
+        handler = new GameWebSocketHandler(commandDispatcher, 30);
     }
 
     @Test
@@ -89,6 +89,28 @@ class GameWebSocketHandlerTest {
         handler.afterConnectionClosed(session, CloseStatus.GOING_AWAY);
 
         verify(commandDispatcher).handleConnectionClosed("s-1");
+    }
+
+    @Test
+    void pingIsAnsweredWithPongWithoutReachingTheGame() throws Exception {
+        WebSocketSession session = openSession("s-1");
+        handler.afterConnectionEstablished(session);
+
+        handler.handleTextMessage(session,
+                new org.springframework.web.socket.TextMessage("{\"commandType\":\"PING\",\"executable\":{}}"));
+
+        verify(session).sendMessage(argThat(m -> m.getPayload().toString().contains("PONG")));
+        verify(commandDispatcher, never()).addCommandToList(any());
+    }
+
+    @Test
+    void aSilentSessionIsClosedAsDead() throws Exception {
+        WebSocketSession silent = openSession("s-silent");
+        handler.afterConnectionEstablished(silent);
+
+        handler.closeIdleSessions(System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(31));
+
+        verify(silent).close(CloseStatus.SESSION_NOT_RELIABLE);
     }
 
     @Test

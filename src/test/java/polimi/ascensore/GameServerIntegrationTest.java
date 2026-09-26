@@ -143,6 +143,24 @@ class GameServerIntegrationTest {
         assertEquals(0, info.getAsJsonObject("bets").get(order.get(0)).getAsInt());
     }
 
+    @Test
+    void loggingInOnASecondDeviceClosesTheFirst() throws Exception {
+        Client phone = loggedIn("uid-dup", "dupli");
+        Client laptop = connect();
+
+        laptop.send(playerInfoRequest("uid-dup", ""));
+
+        assertTrue(laptop.await("PLAYER_INFO_RESPONSE").get("isLogged").getAsBoolean());
+        phone.await("SESSION_REPLACED");
+    }
+
+    @Test
+    void pingIsAnswered() throws Exception {
+        Client client = connect();
+        client.send(command("PING", "{}"));
+        client.await("PONG");
+    }
+
     ///// Helpers /////
 
     private Client loggedIn(String uid, String nickname) throws Exception {

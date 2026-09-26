@@ -17,7 +17,8 @@ public class CommandDeserializer implements JsonDeserializer<Command> {
             CommandType.LEAVE_GAME_REQUEST, LeaveGameRequest.class,
             CommandType.SET_BET, SetBet.class,
             CommandType.PUT_CARD, PutCard.class,
-            CommandType.LOGOUT, Logout.class);
+            CommandType.LOGOUT, Logout.class,
+            CommandType.PING, Ping.class);
 
     @Override
     public Command deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)

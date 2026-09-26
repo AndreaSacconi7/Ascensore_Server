@@ -45,6 +45,12 @@ refetched on key rotation) and takes the player id from the token.
 explicitly: a timer that fires just as the player returns is ignored, and the old socket reporting its close
 after the new one connected does not start a new timer.
 
+**Turn deadlines and liveness.** Every turn has a deadline scheduled on the same command loop: when it
+runs out the server bets or plays for the player, and three timeouts in a row take them out of the match.
+Clients send a heartbeat every few seconds, so a connection that died silently is closed within 30 s and
+the reconnection window starts; outgoing messages are buffered per session so a slow client cannot block
+the loop. One account plays on one device at a time: logging in elsewhere closes the older session.
+
 The wire format is documented in [docs/protocol.md](docs/protocol.md).
 
 ## Project structure
@@ -73,6 +79,7 @@ Requires Java 17+ and a Supabase project (Auth + Postgres).
 | `SUPABASE_DB_PASSWORD` | Database password |
 | `PLAYERS_PER_MATCH` | Match size for clients that do not choose one (default 2) |
 | `MAX_HAND_SIZE` | Largest hand (default 10); lower it for quick test matches |
+| `TURN_SECONDS` | Time to bet or play before the server acts for the player (default 30, 0 = no limit) |
 | `PORT` | HTTP port (default 8080) |
 
 ```bash
