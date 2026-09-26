@@ -19,6 +19,9 @@ public class Game {
 
     private final List<GamePlayer> players;
 
+    // Players who left the match, in leaving order: out of play, listed last in the final standing
+    private final List<GamePlayer> leftPlayers = new ArrayList<>();
+
     private final int maxHandSize;
 
     // 0-based index of the current set; the hand size is derived from it
@@ -103,10 +106,22 @@ public class Game {
      */
     public List<GamePlayer> endGame() {
         List<GamePlayer> results = new ArrayList<>(players);
-        results.sort(Comparator
-                .comparing((GamePlayer p) -> p.getPlayerState() == PlayerState.EXIT)
-                .thenComparing(GamePlayer::getScore, Comparator.reverseOrder()));
+        results.sort(Comparator.comparing(GamePlayer::getScore, Comparator.reverseOrder()));
+        results.addAll(leftPlayers);
         return results;
+    }
+
+    /**
+     * Takes a player out of play for the rest of the match: out of the turn order and of every count
+     * (bets, cards in the trick) that decides whose turn it is.
+     */
+    public void removePlayer(GamePlayer player) {
+        player.updateState(PlayerState.EXIT);
+        players.remove(player);
+        List<GamePlayer> order = new ArrayList<>(tableCard.getPlayerListOrder());
+        order.remove(player);
+        tableCard.setPlayerListOrder(order);
+        leftPlayers.add(player);
     }
 
     public void updateRound() {
@@ -115,6 +130,11 @@ public class Game {
 
     public void registerBet() {
         this.betsPlaced++;
+    }
+
+    // A player who had already bet left: their bet no longer counts towards the betting round
+    public void unregisterBet() {
+        this.betsPlaced--;
     }
 
     public GamePlayer getPlayerByNickName(String nickname) throws PlayerNickNameDoesNotExist {

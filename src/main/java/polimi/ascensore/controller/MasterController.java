@@ -175,11 +175,12 @@ public class MasterController implements GameLifeCycleListener {
     }
 
     /**
-     * Leaves matchmaking; ignored once the match has started.
+     * Leaves matchmaking, or the match in progress for good.
      */
-    public void leaveWaitingRoom(String sessionId) {
+    public void leaveGame(String sessionId) {
         Player player = getPlayerBySession(sessionId);
-        if (player != null && openMatches.contains(gameOf(player))) {
+        if (player != null && checkIfPlayerInGame(player.getSupabaseUid())) {
+            log.info("{} left their match", player.getNickname());
             leaveMatch(player);
         }
     }

@@ -138,6 +138,112 @@ class GameControllerTest {
         assertEquals(1, game.getBetsPlaced());
     }
 
+    ///// Players leaving /////
+
+    @Test
+    void leavingOnYourTurnToBetPassesTheTurn() throws Exception {
+        GameController controller = startMatch(3, 10);
+        Game game = controller.getGame();
+        GamePlayer bettor = active(game);
+
+        controller.playerExitGame(bettor.getNickname());
+
+        assertEquals(2, game.getPlayers().size());
+        assertEquals(PlayerState.BET, active(game).getPlayerState());
+        assertNotEquals(bettor, active(game));
+        assertEquals(0, listener.endedMatches);
+    }
+
+    @Test
+    void aBetFromAPlayerWhoLeftStopsCounting() throws Exception {
+        GameController controller = startMatch(3, 10);
+        Game game = controller.getGame();
+        GamePlayer first = active(game);
+        controller.setBet(0, first.getNickname());
+        GamePlayer second = active(game);
+
+        controller.playerExitGame(first.getNickname());
+
+        assertEquals(0, game.getBetsPlaced());
+        assertSame(second, active(game), "the player who was betting keeps the turn");
+    }
+
+    @Test
+    void aCardFromAPlayerWhoLeftLeavesTheTrick() throws Exception {
+        GameController controller = startMatch(3, 10);
+        Game game = controller.getGame();
+        playUntilCardsOnTable(controller, game, 1);
+        GamePlayer leader = game.getTableCard().getPlayerListOrder().get(0);
+
+        controller.playerExitGame(leader.getNickname());
+
+        assertTrue(game.getTableCard().getPlayedCards().isEmpty());
+        assertEquals(PlayerState.PUT, active(game).getPlayerState());
+        playToTheEnd(controller);
+    }
+
+    @Test
+    void aTwoPlayerMatchEndsWhenOneLeavesAndTheOtherWins() throws Exception {
+        GameController controller = startMatch(2, 10);
+        Game game = controller.getGame();
+        GamePlayer leaver = game.getPlayers().get(0);
+        GamePlayer stayer = game.getPlayers().get(1);
+
+        controller.playerExitGame(leaver.getNickname());
+
+        assertEquals(1, listener.endedMatches);
+        Map<String, Integer> result = ((EndGame) notifier.broadcasts.stream()
+                .filter(m -> m.getMessageType() == MessageType.END_GAME).findFirst().orElseThrow()
+                .getExecutable()).getGameResult();
+        assertEquals(List.of(stayer.getNickname(), leaver.getNickname()), List.copyOf(result.keySet()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {3, 4})
+    void matchesSurvivePlayersLeavingAtAnyMoment(int players) throws Exception {
+        Random chaos = new Random(players);
+        for (int round = 0; round < 150; round++) {
+            listener.endedMatches = 0;
+            notifier.broadcasts.clear();
+            GameController controller = startMatch(players, 1 + chaos.nextInt(Math.min(10, 40 / players)));
+            Game game = controller.getGame();
+            int leaves = 1 + chaos.nextInt(players - 1);
+            for (int step = 0; step < 100_000 && listener.endedMatches == 0; step++) {
+                if (leaves > 0 && chaos.nextInt(12) == 0) {
+                    List<GamePlayer> inGame = game.getPlayers();
+                    controller.playerExitGame(inGame.get(chaos.nextInt(inGame.size())).getNickname());
+                    leaves--;
+                    continue;
+                }
+                GamePlayer actor = active(game);
+                if (actor.getPlayerState() == PlayerState.BET) {
+                    controller.setBet(validBet(game), actor.getNickname());
+                } else {
+                    Card card = validCard(game, actor);
+                    controller.putCard(card.getSeed(), card.getValue(), actor.getNickname());
+                }
+            }
+            assertEquals(1, listener.endedMatches, "match " + round + " did not end");
+            Map<String, Integer> result = ((EndGame) notifier.broadcasts.stream()
+                    .filter(m -> m.getMessageType() == MessageType.END_GAME).reduce((a, b) -> b).orElseThrow()
+                    .getExecutable()).getGameResult();
+            assertEquals(players, result.size(), "everyone appears in the final standing");
+        }
+    }
+
+    // Plays valid moves until the current trick holds the given number of cards
+    private void playUntilCardsOnTable(GameController controller, Game game, int cards) {
+        while (game.getTableCard().getPlayedCards().size() < cards) {
+            GamePlayer actor = active(game);
+            if (actor.getPlayerState() == PlayerState.BET) {
+                controller.setBet(validBet(game), actor.getNickname());
+            } else {
+                Card card = validCard(game, actor);
+                controller.putCard(card.getSeed(), card.getValue(), actor.getNickname());
+            }
+        }
+    }
+
     // Plays valid moves until the match ends; returns the number of tricks played in each set
     private int[] playToTheEnd(GameController controller) {
         Game game = controller.getGame();

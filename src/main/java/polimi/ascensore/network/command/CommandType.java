@@ -11,7 +11,7 @@ public enum CommandType {
     // Enter matchmaking for a match of 2 to 4 players
     JOIN_GAME_REQUEST,
 
-    // Leave matchmaking before the match starts
+    // Leave matchmaking, or the match in progress for good
     LEAVE_GAME_REQUEST,
 
     // Bet how many tricks the player will take this set

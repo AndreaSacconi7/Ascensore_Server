@@ -3,7 +3,7 @@ package polimi.ascensore.network.command;
 import polimi.ascensore.network.websocket.CommandDispatcher;
 
 /**
- * Leave matchmaking before the match starts.
+ * Leave matchmaking, or the match in progress for good.
  */
 public class LeaveGameRequest implements ExecutableInServer {
 

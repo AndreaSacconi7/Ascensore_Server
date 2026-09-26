@@ -102,4 +102,3 @@ The WebSocket endpoint is `ws://localhost:8080/ws` (use `wss://` behind TLS in p
   instance; scaling out would need matches pinned to instances.
 - **One loop for all matches.** Simple and race-free; a slow database call (login) delays every match by
   its duration. Per-match loops are the next step if load grows.
-- **A player who leaves ends the match** for everyone instead of the match continuing without them.

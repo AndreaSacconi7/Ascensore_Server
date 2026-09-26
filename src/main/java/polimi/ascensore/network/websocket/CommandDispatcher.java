@@ -47,7 +47,7 @@ public class CommandDispatcher {
     }
 
     public void leaveGame(String sessionId) {
-        masterController.leaveWaitingRoom(sessionId);
+        masterController.leaveGame(sessionId);
     }
 
     public void putCard(Seed seed, int value, String sessionId) {

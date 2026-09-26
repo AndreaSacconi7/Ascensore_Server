@@ -13,7 +13,7 @@ arrives on, never by a field in the payload.
 |---|---|---|
 | `PLAYER_INFO_REQUEST` | `token`, `nickname` | First command on every socket. `token` is the Supabase access token; `nickname` is only read when the account has no public nickname yet, and is empty otherwise. |
 | `JOIN_GAME_REQUEST` | `players` | Enter matchmaking for a match of `players` (2–4); the server default when absent or invalid. Each size has its own queue. |
-| `LEAVE_GAME_REQUEST` | – | Leave matchmaking; ignored once the match has started. |
+| `LEAVE_GAME_REQUEST` | – | Leave matchmaking, or the match in progress for good (see *Leaving a match*). |
 | `SET_BET` | `bet` | Bet how many tricks you will take this set. |
 | `PUT_CARD` | `seed`, `value` | Play a card. |
 | `LOGOUT` | – | Leave the current match (if any) and close the session. |
@@ -36,7 +36,7 @@ Envelope: `{"messageType": "...", "executable": {...}}`.
 | `END_ROUND` | `nextRoundNumber`, `nextPlayerOrderAndTaken` | A trick is over. Keys are in the play order of the next trick (winner first); values are tricks taken. |
 | `END_SET` | `nextSetNumber`, `setsPlayed`, `nextPlayerOrderAndScore` | A set is over. `nextSetNumber` is the next hand size, `setsPlayed` the sets completed so far; keys are in the next betting order. |
 | `END_GAME` | `gameResult` | Final scores, winner first. A player who left scores -500. |
-| `PLAYER_EXIT_GAME` | `nickname` | A player left the match (currently this ends the match). |
+| `PLAYER_EXIT_GAME` | `nickname` | A player left the match for good; their card, if any, is gone from the current trick. `END_GAME` follows if only one player remains. |
 | `TEXT_MESSAGE` | `text` | Why your last command was rejected (to you only). |
 | `INFO_AFTER_RECONNECTION` | `set`, `round`, `setsPlayed`, `maxHandSize`, `scores`, `bets`, `roundsWon`, `playedCards` | Table state for a player who reconnected, after `STARTING_GAME`, `BRISCOLA_UPDATE` and `HAND_UPDATE`, and before one `PLAYER_STATE_UPDATE` per player. |
 
@@ -50,9 +50,22 @@ Maps whose key order carries meaning (play order, standing) are sent in that ord
 4. After the last card of a trick: `END_ROUND`, and the winner leads the next trick
 5. After the last trick of the set: `END_SET`, or `END_GAME` after the last set
 
+## Leaving a match
+
+A player leaves with `LEAVE_GAME_REQUEST`, or by not reconnecting in time. Leaving is final. While at least
+two players remain the match goes on without them:
+
+- their bet no longer counts towards the betting round;
+- their card, if already played, is taken out of the current trick (in the peak set, where the lead card
+  is the briscola, the briscola becomes the next card on the table and `BRISCOLA_UPDATE` is sent);
+- if it was their turn, it passes to the next player.
+
+With one player left the match ends and that player wins. Players who left are listed last in `END_GAME`,
+with a score of -500.
+
 ## Disconnections
 
 If a player's socket drops during a match, the server keeps their seat for 60 seconds. Reconnecting with
 `PLAYER_INFO_REQUEST` on a new socket resumes the match with `STARTING_GAME` … `INFO_AFTER_RECONNECTION`.
-After 60 seconds the player leaves the match (`PLAYER_EXIT_GAME`, then `END_GAME`). Leaving a match that
-has not started frees the seat immediately.
+After 60 seconds the player leaves the match as above. Leaving a match that has not started frees the seat
+immediately.

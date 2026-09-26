@@ -109,7 +109,10 @@ public class GameController {
         game.registerBet();
         broadcast(new SettedBetUpdate(nickname, bet), MessageType.SETTED_BET);
         endTurn(player);
+        nextBettor();
+    }
 
+    private void nextBettor() {
         if (game.getBetsPlaced() < game.getPlayers().size()) {
             giveTurn(playOrder().get(game.getBetsPlaced()), PlayerState.BET);
         } else {
@@ -163,16 +166,54 @@ public class GameController {
         }
     }
 
+    /**
+     * A player leaves for good (on purpose, or not back in time after a disconnection). The match goes on
+     * without them while at least two players remain: their bet stops counting, their card leaves the
+     * current trick, and if it was their turn it passes on. With one player left, the match ends.
+     */
     public void playerExitGame(String nickname) {
-        GamePlayer player = findPlayer(nickname);
-        if (player != null) {
-            // Players who left cannot win
-            player.updateState(PlayerState.EXIT);
+        GamePlayer leaver = findPlayer(nickname);
+        if (leaver == null) {
+            return;
         }
+        boolean wasOnTurn = leaver.getPlayerState() == PlayerState.BET || leaver.getPlayerState() == PlayerState.PUT;
+        boolean betting = game.getBetsPlaced() < game.getPlayers().size();
+        int position = playOrder().indexOf(leaver);
+        List<Card> trick = game.getTableCard().getPlayedCards();
+
+        if (betting && position < game.getBetsPlaced()) {
+            game.unregisterBet();
+        }
+        boolean removedLeadCard = false;
+        if (!betting && position < trick.size()) {
+            trick.remove(position);
+            removedLeadCard = position == 0;
+        }
+        game.removePlayer(leaver);
+        log.info("{} left the match, {} players remain", nickname, game.getPlayers().size());
         broadcast(new PlayerExitGame(nickname), MessageType.PLAYER_EXIT_GAME);
 
-        // A match cannot continue with a missing player yet, so it ends for everyone
-        endGameResult();
+        if (game.getPlayers().size() < 2) {
+            endGameResult();
+            return;
+        }
+        if (removedLeadCard && game.isPeakSet()) {
+            // In the peak set the lead card is the briscola: it is now the next card, if any
+            Card briscola = trick.isEmpty() ? null : trick.get(0);
+            game.getTableCard().setBriscola(briscola);
+            broadcast(new BriscolaUpdate(briscola), MessageType.BRISCOLA_UPDATE);
+        }
+
+        if (betting) {
+            if (wasOnTurn || game.getBetsPlaced() == game.getPlayers().size()) {
+                nextBettor();
+            }
+        } else if (trick.size() == game.getPlayers().size()) {
+            // Everyone still playing has played: the trick is complete without the leaver's card
+            completeTrick();
+        } else if (wasOnTurn) {
+            giveTurn(playOrder().get(trick.size()), PlayerState.PUT);
+        }
     }
 
     /**

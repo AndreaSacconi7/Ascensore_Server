@@ -221,7 +221,7 @@ class MasterControllerTest {
         verify(sockets).forwardUpdateToAll(argThat(m -> m.getExecutable() instanceof WaitingRoomUpdate u
                 && u.getPlayers().equals(List.of("alice", "bob")) && u.getPlayersPerMatch() == 4), any());
 
-        controller.leaveWaitingRoom("s-2");
+        controller.leaveGame("s-2");
 
         assertFalse(controller.checkIfPlayerInGame("uid-bob"));
         // Once when Alice joined alone, once when Bob left
@@ -230,12 +230,32 @@ class MasterControllerTest {
     }
 
     @Test
-    void leavingIsIgnoredOnceTheMatchHasStarted() {
+    void leavingATwoPlayerMatchEndsItForBoth() {
         startedMatch();
 
-        controller.leaveWaitingRoom("s-1");
+        controller.leaveGame("s-1");
 
+        assertFalse(controller.checkIfPlayerInGame("uid-alice"));
+        assertFalse(controller.checkIfPlayerInGame("uid-bob"), "the match ended, so Bob is free to play again");
+        verify(sockets).forwardUpdateToAll(argThat(m -> m.getMessageType() == MessageType.END_GAME), any());
+    }
+
+    @Test
+    void leavingABiggerMatchLetsTheOthersPlayOn() {
+        loggedIn("s-1", new Player("uid-alice", "alice"));
+        loggedIn("s-2", new Player("uid-bob", "bob"));
+        loggedIn("s-3", new Player("uid-carol", "carol"));
+        controller.addPlayerToGame("s-1", 3);
+        controller.addPlayerToGame("s-2", 3);
+        controller.addPlayerToGame("s-3", 3);
+
+        controller.leaveGame("s-2");
+
+        assertFalse(controller.checkIfPlayerInGame("uid-bob"));
         assertTrue(controller.checkIfPlayerInGame("uid-alice"));
+        assertTrue(controller.checkIfPlayerInGame("uid-carol"));
+        verify(sockets).forwardUpdateToAll(argThat(m -> m.getMessageType() == MessageType.PLAYER_EXIT_GAME), any());
+        verify(sockets, never()).forwardUpdateToAll(argThat(m -> m.getMessageType() == MessageType.END_GAME), any());
     }
 
     ///// Disconnection during a match /////
