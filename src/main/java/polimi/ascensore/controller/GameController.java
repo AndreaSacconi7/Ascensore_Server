@@ -31,11 +31,31 @@ public class GameController {
 
     private final GameLifeCycleListener gameLifeCycleListener;
 
+    // Players needed to start: the match starts as soon as it is full
+    private final int playersPerMatch;
+
     public GameController(GameLifeCycleListener gameLifeCycleListener, GameNotifier notifier,
-                          int maxHandSize, Random random) {
+                          int playersPerMatch, int maxHandSize, Random random) {
         this.game = new Game(maxHandSize, random);
         this.notifier = notifier;
         this.gameLifeCycleListener = gameLifeCycleListener;
+        this.playersPerMatch = playersPerMatch;
+    }
+
+    public int getPlayersPerMatch() {
+        return playersPerMatch;
+    }
+
+    public boolean isFull() {
+        return game.getPlayers().size() >= playersPerMatch;
+    }
+
+    /**
+     * Tells everyone waiting in this match who is in and how many players it needs.
+     */
+    public void broadcastWaitingRoom() {
+        List<String> nicknames = game.getPlayers().stream().map(GamePlayer::getNickname).toList();
+        broadcast(new WaitingRoomUpdate(playersPerMatch, nicknames), MessageType.WAITING_ROOM_UPDATE);
     }
 
     public void addPlayerToGame(Player player, String sessionId) throws CannotAddPlayerNowException {

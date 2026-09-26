@@ -6,7 +6,7 @@ Authoritative multiplayer server for **Ascensore**, a traditional Italian trick-
 
 ## The game
 
-Played with the 40-card Italian deck by 2–4 players. The hand size goes **up from 1 to 10 cards and back down
+Played with the 40-card Italian deck by 2–4 players; each player picks the match size and matchmaking keeps a queue per size. The hand size goes **up from 1 to 10 cards and back down
 to 1** — like an elevator (*ascensore*), 19 sets in total. At the start of every set each player bets exactly
 how many tricks they will take; the last player to bet cannot make the bets add up to the number of tricks,
 so someone always misses. An exact bet scores 10 plus 10 per trick; a missed bet loses 10 per trick of
@@ -71,7 +71,7 @@ Requires Java 17+ and a Supabase project (Auth + Postgres).
 | `SUPABASE_DB_URL` | JDBC URL of the database, e.g. `jdbc:postgresql://<host>:5432/postgres`. The direct host is IPv6-only; on IPv4-only hosts use the connection pooler URL. |
 | `SUPABASE_DB_USER` | Database user (default `postgres`) |
 | `SUPABASE_DB_PASSWORD` | Database password |
-| `PLAYERS_PER_MATCH` | 2–4 (default 2) |
+| `PLAYERS_PER_MATCH` | Match size for clients that do not choose one (default 2) |
 | `MAX_HAND_SIZE` | Largest hand (default 10); lower it for quick test matches |
 | `PORT` | HTTP port (default 8080) |
 

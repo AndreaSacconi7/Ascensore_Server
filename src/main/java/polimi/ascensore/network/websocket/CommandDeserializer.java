@@ -14,6 +14,7 @@ public class CommandDeserializer implements JsonDeserializer<Command> {
     private static final Map<CommandType, Class<? extends ExecutableInServer>> EXECUTABLES = Map.of(
             CommandType.PLAYER_INFO_REQUEST, PlayerInfoRequest.class,
             CommandType.JOIN_GAME_REQUEST, JoinGameRequest.class,
+            CommandType.LEAVE_GAME_REQUEST, LeaveGameRequest.class,
             CommandType.SET_BET, SetBet.class,
             CommandType.PUT_CARD, PutCard.class,
             CommandType.LOGOUT, Logout.class);

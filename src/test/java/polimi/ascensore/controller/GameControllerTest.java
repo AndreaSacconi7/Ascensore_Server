@@ -52,7 +52,7 @@ class GameControllerTest {
     private final Listener listener = new Listener();
 
     private GameController startMatch(int players, int maxHandSize) throws Exception {
-        GameController controller = new GameController(listener, notifier, maxHandSize, new Random(42));
+        GameController controller = new GameController(listener, notifier, players, maxHandSize, new Random(42));
         for (int i = 0; i < players; i++) {
             controller.addPlayerToGame(new Player("uid-" + i, "player" + i), "session-" + i);
         }

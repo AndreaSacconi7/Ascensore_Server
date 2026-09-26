@@ -149,7 +149,7 @@ public class MasterController implements GameLifeCycleListener {
 
     ///// MATCHMAKING AND MOVES /////
 
-    public void addPlayerToGame(String sessionId) {
+    public void addPlayerToGame(String sessionId, Integer requestedPlayers) {
         Player player = getPlayerBySession(sessionId);
         if (player == null) {
             log.warn("JOIN_GAME_REQUEST ignored: session {} is not logged in", sessionId);
@@ -160,23 +160,38 @@ public class MasterController implements GameLifeCycleListener {
             return;
         }
 
-        GameController match = joinOpenMatch(player, sessionId);
+        int size = settings.matchSize(requestedPlayers);
+        GameController match = joinOpenMatch(player, sessionId, size);
         playerGameMap.put(player.getSupabaseUid(), match);
-        reply(sessionId, new JoinGameResponse(true, player.getNickname()));
-        log.info("{} joined a match ({}/{})", player.getNickname(), match.getNumPlayersInGame(),
-                settings.playersPerMatch());
+        reply(sessionId, new JoinGameResponse(true, player.getNickname(), size));
+        log.info("{} joined a {}-player match ({}/{})", player.getNickname(), size, match.getNumPlayersInGame(), size);
 
-        if (match.getNumPlayersInGame() == settings.playersPerMatch()) {
+        if (match.isFull()) {
             openMatches.remove(match);
             match.startGame();
+        } else {
+            match.broadcastWaitingRoom();
         }
     }
 
-    // Seats the player in the oldest match still waiting for players, or opens a new one
-    private GameController joinOpenMatch(Player player, String sessionId) {
+    /**
+     * Leaves matchmaking; ignored once the match has started.
+     */
+    public void leaveWaitingRoom(String sessionId) {
+        Player player = getPlayerBySession(sessionId);
+        if (player != null && openMatches.contains(gameOf(player))) {
+            leaveMatch(player);
+        }
+    }
+
+    // Seats the player in the oldest match of that size still waiting for players, or opens a new one
+    private GameController joinOpenMatch(Player player, String sessionId, int size) {
         Iterator<GameController> it = openMatches.iterator();
         while (it.hasNext()) {
             GameController match = it.next();
+            if (match.getPlayersPerMatch() != size) {
+                continue;
+            }
             try {
                 match.addPlayerToGame(player, sessionId);
                 return match;
@@ -185,7 +200,7 @@ public class MasterController implements GameLifeCycleListener {
                 it.remove();
             }
         }
-        GameController match = new GameController(this, sockets, settings.maxHandSize(), random);
+        GameController match = new GameController(this, sockets, size, settings.maxHandSize(), random);
         openMatches.add(match);
         try {
             match.addPlayerToGame(player, sessionId);
@@ -302,6 +317,8 @@ public class MasterController implements GameLifeCycleListener {
             match.removeWaitingPlayer(player.getNickname());
             if (match.getNumPlayersInGame() == 0) {
                 openMatches.remove(match);
+            } else {
+                match.broadcastWaitingRoom();
             }
             return;
         }

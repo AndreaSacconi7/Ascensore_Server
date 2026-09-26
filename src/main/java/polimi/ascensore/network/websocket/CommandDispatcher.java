@@ -42,8 +42,12 @@ public class CommandDispatcher {
         masterController.fetchPlayerInfo(sessionId, token, nickname);
     }
 
-    public void joinGame(String sessionId) {
-        masterController.addPlayerToGame(sessionId);
+    public void joinGame(String sessionId, Integer players) {
+        masterController.addPlayerToGame(sessionId, players);
+    }
+
+    public void leaveGame(String sessionId) {
+        masterController.leaveWaitingRoom(sessionId);
     }
 
     public void putCard(Seed seed, int value, String sessionId) {

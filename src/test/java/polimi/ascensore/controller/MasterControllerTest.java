@@ -8,12 +8,15 @@ import polimi.ascensore.persistence.Player;
 import polimi.ascensore.model.Seed;
 import polimi.ascensore.network.message.JoinGameResponse;
 import polimi.ascensore.network.message.Message;
+import polimi.ascensore.network.message.MessageType;
 import polimi.ascensore.network.message.PlayerInfoResponse;
+import polimi.ascensore.network.message.WaitingRoomUpdate;
 import polimi.ascensore.network.websocket.GameWebSocketHandler;
 import polimi.ascensore.persistence.PlayerRepository;
 import polimi.ascensore.auth.SupabaseAuthService;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -55,7 +58,7 @@ class MasterControllerTest {
     void commandsFromASessionThatIsNotLoggedInAreIgnored() {
         assertDoesNotThrow(() -> controller.putCard(Seed.CUPS, 1, "s-anon"));
         assertDoesNotThrow(() -> controller.setBet(1, "s-anon"));
-        assertDoesNotThrow(() -> controller.addPlayerToGame("s-anon"));
+        assertDoesNotThrow(() -> controller.addPlayerToGame("s-anon", null));
         assertDoesNotThrow(() -> controller.logout("s-anon"));
         assertDoesNotThrow(() -> controller.handleConnectionClosed("s-anon"));
     }
@@ -143,8 +146,8 @@ class MasterControllerTest {
     void joiningTwiceDoesNotPutThePlayerInTwoMatches() {
         loggedIn("s-1", new Player("uid-alice", "alice"));
 
-        controller.addPlayerToGame("s-1");
-        controller.addPlayerToGame("s-1");
+        controller.addPlayerToGame("s-1", null);
+        controller.addPlayerToGame("s-1", null);
 
         verify(sockets, times(1)).sendMessageToClient(argThat(m -> m.getExecutable() instanceof JoinGameResponse), eq("s-1"));
     }
@@ -154,11 +157,11 @@ class MasterControllerTest {
         loggedIn("s-1", new Player("uid-alice", "alice"));
         loggedIn("s-2", new Player("uid-bob", "bob"));
 
-        controller.addPlayerToGame("s-1");
-        controller.addPlayerToGame("s-2");
+        controller.addPlayerToGame("s-1", null);
+        controller.addPlayerToGame("s-2", null);
 
         verify(sockets, atLeastOnce()).forwardUpdateToAll(
-                argThat(m -> m.getMessageType() == polimi.ascensore.network.message.MessageType.STARTING_GAME), any());
+                argThat(m -> m.getMessageType() == MessageType.STARTING_GAME), any());
     }
 
     @Test
@@ -166,18 +169,73 @@ class MasterControllerTest {
         loggedIn("s-1", new Player("uid-alice", "alice"));
         loggedIn("s-2", new Player("uid-bob", "bob"));
         loggedIn("s-3", new Player("uid-carol", "carol"));
-        controller.addPlayerToGame("s-1");
+        controller.addPlayerToGame("s-1", null);
 
         controller.handleConnectionClosed("s-1");
         assertFalse(controller.hasPendingDisconnect("uid-alice"));
         assertFalse(controller.checkIfPlayerInGame("uid-alice"));
 
         // The next two players get a clean match, which starts with just them
-        controller.addPlayerToGame("s-2");
-        controller.addPlayerToGame("s-3");
+        controller.addPlayerToGame("s-2", null);
+        controller.addPlayerToGame("s-3", null);
         verify(sockets, atLeastOnce()).forwardUpdateToAll(
-                argThat(m -> m.getMessageType() == polimi.ascensore.network.message.MessageType.STARTING_GAME),
+                argThat(m -> m.getMessageType() == MessageType.STARTING_GAME),
                 argThat(players -> players.size() == 2));
+    }
+
+    @Test
+    void playersChooseTheMatchSizeAndSizesDoNotMix() {
+        loggedIn("s-1", new Player("uid-alice", "alice"));
+        loggedIn("s-2", new Player("uid-bob", "bob"));
+        loggedIn("s-3", new Player("uid-carol", "carol"));
+
+        controller.addPlayerToGame("s-1", 3);
+        controller.addPlayerToGame("s-2", 2);
+        verify(sockets, never()).forwardUpdateToAll(argThat(m -> m.getMessageType() == MessageType.STARTING_GAME), any());
+
+        controller.addPlayerToGame("s-3", 3);
+        verify(sockets, never()).forwardUpdateToAll(argThat(m -> m.getMessageType() == MessageType.STARTING_GAME), any());
+
+        loggedIn("s-4", new Player("uid-dave", "dave"));
+        controller.addPlayerToGame("s-4", 3);
+        verify(sockets).forwardUpdateToAll(argThat(m -> m.getMessageType() == MessageType.STARTING_GAME),
+                argThat(players -> players.size() == 3));
+    }
+
+    @Test
+    void invalidMatchSizeFallsBackToTheDefault() {
+        loggedIn("s-1", new Player("uid-alice", "alice"));
+
+        controller.addPlayerToGame("s-1", 7);
+
+        verify(sockets).sendMessageToClient(argThat(m -> m.getExecutable() instanceof JoinGameResponse r
+                && r.getPlayersPerMatch() == 2), eq("s-1"));
+    }
+
+    @Test
+    void waitingPlayersSeeWhoJoinsAndLeaves() {
+        loggedIn("s-1", new Player("uid-alice", "alice"));
+        loggedIn("s-2", new Player("uid-bob", "bob"));
+        controller.addPlayerToGame("s-1", 4);
+        controller.addPlayerToGame("s-2", 4);
+        verify(sockets).forwardUpdateToAll(argThat(m -> m.getExecutable() instanceof WaitingRoomUpdate u
+                && u.getPlayers().equals(List.of("alice", "bob")) && u.getPlayersPerMatch() == 4), any());
+
+        controller.leaveWaitingRoom("s-2");
+
+        assertFalse(controller.checkIfPlayerInGame("uid-bob"));
+        // Once when Alice joined alone, once when Bob left
+        verify(sockets, times(2)).forwardUpdateToAll(argThat(m -> m.getExecutable() instanceof WaitingRoomUpdate u
+                && u.getPlayers().equals(List.of("alice"))), any());
+    }
+
+    @Test
+    void leavingIsIgnoredOnceTheMatchHasStarted() {
+        startedMatch();
+
+        controller.leaveWaitingRoom("s-1");
+
+        assertTrue(controller.checkIfPlayerInGame("uid-alice"));
     }
 
     ///// Disconnection during a match /////
@@ -224,8 +282,8 @@ class MasterControllerTest {
         Player alice = new Player("uid-alice", "alice");
         loggedIn("s-1", alice);
         loggedIn("s-2", new Player("uid-bob", "bob"));
-        controller.addPlayerToGame("s-1");
-        controller.addPlayerToGame("s-2");
+        controller.addPlayerToGame("s-1", null);
+        controller.addPlayerToGame("s-2", null);
         return alice;
     }
 

@@ -1,14 +1,20 @@
 package polimi.ascensore.network.message;
 
-public class JoinGameResponse implements ExecutableInClient{
+/**
+ * The player is seated in a match that is waiting for players.
+ */
+public class JoinGameResponse implements ExecutableInClient {
 
-    final String nickname;
+    private final String nickname;
 
-    final boolean isJoined;
+    private final boolean isJoined;
 
-    public JoinGameResponse(boolean isJoined, String nickname) {
+    private final int playersPerMatch;
+
+    public JoinGameResponse(boolean isJoined, String nickname, int playersPerMatch) {
         this.nickname = nickname;
         this.isJoined = isJoined;
+        this.playersPerMatch = playersPerMatch;
     }
 
     public String getNickname() {
@@ -17,5 +23,9 @@ public class JoinGameResponse implements ExecutableInClient{
 
     public boolean getIsJoined() {
         return isJoined;
+    }
+
+    public int getPlayersPerMatch() {
+        return playersPerMatch;
     }
 }

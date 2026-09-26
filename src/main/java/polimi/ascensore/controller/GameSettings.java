@@ -5,7 +5,8 @@ import org.springframework.stereotype.Component;
 import polimi.ascensore.model.Deck;
 
 /**
- * Match configuration. A 40-card deck limits players × max hand size to 40.
+ * Match configuration. Players choose the match size (2 to 4) when they join; a 40-card deck limits
+ * players × max hand size to 40.
  */
 @Component
 public class GameSettings {
@@ -14,21 +15,37 @@ public class GameSettings {
 
     private final int maxHandSize;
 
+    public static final int MIN_PLAYERS = 2;
+    public static final int MAX_PLAYERS = 4;
+
     public GameSettings(@Value("${ascensore.players-per-match:2}") int playersPerMatch,
                         @Value("${ascensore.max-hand-size:10}") int maxHandSize) {
-        if (playersPerMatch < 2 || playersPerMatch > 4) {
-            throw new IllegalArgumentException("players-per-match must be between 2 and 4, was " + playersPerMatch);
+        if (maxHandSize < 1 || MIN_PLAYERS * maxHandSize > Deck.SIZE) {
+            throw new IllegalArgumentException("max-hand-size must be between 1 and " + Deck.SIZE / MIN_PLAYERS);
         }
-        if (maxHandSize < 1 || playersPerMatch * maxHandSize > Deck.SIZE) {
-            throw new IllegalArgumentException("max-hand-size " + maxHandSize + " does not fit a "
-                    + Deck.SIZE + "-card deck with " + playersPerMatch + " players");
+        this.maxHandSize = maxHandSize;
+        if (!isValidMatchSize(playersPerMatch)) {
+            throw new IllegalArgumentException("players-per-match " + playersPerMatch + " is not a valid match size");
         }
         this.playersPerMatch = playersPerMatch;
-        this.maxHandSize = maxHandSize;
     }
 
+    /**
+     * Match size used when a client does not ask for one.
+     */
     public int playersPerMatch() {
         return playersPerMatch;
+    }
+
+    public boolean isValidMatchSize(int players) {
+        return players >= MIN_PLAYERS && players <= MAX_PLAYERS && players * maxHandSize <= Deck.SIZE;
+    }
+
+    /**
+     * The requested match size if valid, otherwise the default.
+     */
+    public int matchSize(Integer requested) {
+        return requested != null && isValidMatchSize(requested) ? requested : playersPerMatch;
     }
 
     public int maxHandSize() {

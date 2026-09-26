@@ -2,16 +2,16 @@ package polimi.ascensore.network.command;
 
 import polimi.ascensore.network.websocket.CommandDispatcher;
 
-public class JoinGameRequest implements ExecutableInServer {
-
-    // Match size the player wants (2 to 4); the server default when absent or invalid
-    private Integer players;
+/**
+ * Leave matchmaking before the match starts.
+ */
+public class LeaveGameRequest implements ExecutableInServer {
 
     private transient String clientSessionId;
 
     @Override
     public void execute(CommandDispatcher commandDispatcher) {
-        commandDispatcher.joinGame(clientSessionId, players);
+        commandDispatcher.leaveGame(clientSessionId);
     }
 
     @Override

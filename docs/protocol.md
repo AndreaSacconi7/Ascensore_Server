@@ -12,7 +12,8 @@ arrives on, never by a field in the payload.
 | `commandType` | `executable` | Meaning |
 |---|---|---|
 | `PLAYER_INFO_REQUEST` | `token`, `nickname` | First command on every socket. `token` is the Supabase access token; `nickname` is only read when the account has no public nickname yet, and is empty otherwise. |
-| `JOIN_GAME_REQUEST` | – | Enter matchmaking. |
+| `JOIN_GAME_REQUEST` | `players` | Enter matchmaking for a match of `players` (2–4); the server default when absent or invalid. Each size has its own queue. |
+| `LEAVE_GAME_REQUEST` | – | Leave matchmaking; ignored once the match has started. |
 | `SET_BET` | `bet` | Bet how many tricks you will take this set. |
 | `PUT_CARD` | `seed`, `value` | Play a card. |
 | `LOGOUT` | – | Leave the current match (if any) and close the session. |
@@ -24,7 +25,8 @@ Envelope: `{"messageType": "...", "executable": {...}}`.
 | `messageType` | `executable` | Sent |
 |---|---|---|
 | `PLAYER_INFO_RESPONSE` | `nickname`, `isLogged`, `needsNickname`, `inMatch`, `error` | Answer to `PLAYER_INFO_REQUEST`. `inMatch` means the player has a match in progress and its table state follows. `error` is one of `INVALID_TOKEN`, `NICKNAME_MISSING`, `NICKNAME_INVALID`, `NICKNAME_TAKEN`. With `needsNickname` the client asks the user for a nickname and repeats the request. |
-| `JOIN_GAME_RESPONSE` | `nickname`, `isJoined` | Seated in a match that is waiting for players. |
+| `JOIN_GAME_RESPONSE` | `nickname`, `isJoined`, `playersPerMatch` | Seated in a match that is waiting for players. |
+| `WAITING_ROOM_UPDATE` | `playersPerMatch`, `players` | Who is waiting in your match (joining order), sent to everyone in it whenever someone joins or leaves. |
 | `STARTING_GAME` | `connectedPlayers`, `maxHandSize` | The match starts; players in betting order. Hands go 1..`maxHandSize`..1, so the match has `2 × maxHandSize − 1` sets. |
 | `HAND_UPDATE` | `cards` | Your hand for the new set (to you only). |
 | `BRISCOLA_UPDATE` | `briscolaCard` (may be absent) | Trump card. Absent at the start of the peak set, where the card leading each trick sets it. |
