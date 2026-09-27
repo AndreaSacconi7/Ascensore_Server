@@ -109,8 +109,10 @@ answers `ok` for the hosting platform's checks.
 
 ### Deploying to Fly.io
 
-The `Dockerfile` builds the jar and runs it on a JRE; `fly.toml` keeps one machine always on (a match lives
-on one server) and checks `/health`. With [flyctl](https://fly.io/docs/flyctl/) logged in:
+The `Dockerfile` builds the jar and runs it on a JRE; `fly.toml` runs at most one machine (a match lives on
+one server), checks `/health`, and **scales to zero**: once every player has disconnected the machine is
+suspended, and the next connection wakes it in about a second. Matches waiting for a player to reconnect are
+safe either way (they are saved after every move). With [flyctl](https://fly.io/docs/flyctl/) logged in:
 
 ```bash
 fly launch --no-deploy --copy-config
@@ -120,7 +122,10 @@ fly deploy --ha=false
 
 `--ha=false` matters: by default Fly starts two machines, and two servers would each run their own matches.
 
-Clients then connect to `wss://<app>.fly.dev/ws`. A deploy stops the old machine and starts the new one;
+Clients then connect to `wss://<app>.fly.dev/ws`. The only public HTTP endpoint is `/health`; all the work
+(token checks, database, matches) is behind the login on the WebSocket, and sockets that do not log in within
+15 s are closed, so anonymous connections cannot run up costs or keep the machine awake. Each address may hold
+10 connections (`CLIENT_IP_HEADER=Fly-Client-IP` gives the server the player's real address behind the proxy). A deploy stops the old machine and starts the new one;
 matches in progress are restored and players reconnect on their own.
 
 ## Tests

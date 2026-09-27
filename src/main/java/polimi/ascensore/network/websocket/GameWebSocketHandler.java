@@ -41,6 +41,10 @@ import java.util.concurrent.TimeUnit;
  * Heartbeat: clients send PING every few seconds. A session silent for longer than the idle timeout is a
  * dead connection the network never reported (phone in a pocket, Wi-Fi gone), and is closed, which starts
  * the normal reconnection window.
+ * <p>
+ * Nothing is served before logging in, and a socket that does not present a valid token within
+ * {@link #LOGIN_TIMEOUT_NANOS} is closed: anonymous connections cannot pile up, nor keep an idle server
+ * awake. Each network address may hold only a few connections at a time.
  */
 @Component
 public class GameWebSocketHandler extends TextWebSocketHandler implements GameNotifier {
@@ -49,6 +53,12 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
 
     // A human player sends a handful of commands per minute; anything far above that is a broken or hostile client
     private static final int MAX_COMMANDS_PER_WINDOW = 20;
+
+    // Clients identify right after connecting; the margin covers a slow token refresh
+    static final long LOGIN_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(15);
+
+    // A household or a classroom behind one address still fits; a script opening sockets in a loop does not
+    static final int MAX_CONNECTIONS_PER_ADDRESS = 10;
     private static final long WINDOW_NANOS = TimeUnit.SECONDS.toNanos(5);
 
     // A slow client gets its messages buffered up to these limits, then its session is closed, instead of
@@ -69,6 +79,12 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
 
     // sessionId -> System.nanoTime() of the last message received
     private final Map<String, Long> lastSeen = new ConcurrentHashMap<>();
+
+    // sessionId -> System.nanoTime() of the connection, until the session presents a valid token
+    private final Map<String, Long> awaitingLogin = new ConcurrentHashMap<>();
+
+    // network address -> open connections
+    private final Map<String, Integer> connectionsPerAddress = new ConcurrentHashMap<>();
 
     private final long idleTimeoutNanos;
 
@@ -98,7 +114,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
 
     @PostConstruct
     void startIdleSweeper() {
-        idleSweeper.scheduleWithFixedDelay(() -> closeIdleSessions(System.nanoTime()), 5, 5, TimeUnit.SECONDS);
+        idleSweeper.scheduleWithFixedDelay(() -> closeStaleSessions(System.nanoTime()), 5, 5, TimeUnit.SECONDS);
     }
 
     @PreDestroy
@@ -107,14 +123,30 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
     }
 
     // Visible for tests
-    void closeIdleSessions(long now) {
+    void closeStaleSessions(long now) {
         lastSeen.forEach((sessionId, seen) -> {
             if (now - seen > idleTimeoutNanos) {
                 log.info("Session {} silent for too long, closing it", sessionId);
                 lastSeen.remove(sessionId);
+                awaitingLogin.remove(sessionId);
                 closeSession(sessionId, CloseStatus.SESSION_NOT_RELIABLE);
             }
         });
+        awaitingLogin.forEach((sessionId, connected) -> {
+            if (now - connected > LOGIN_TIMEOUT_NANOS) {
+                log.info("Session {} did not log in, closing it", sessionId);
+                awaitingLogin.remove(sessionId);
+                closeSession(sessionId, CloseStatus.POLICY_VIOLATION);
+            }
+        });
+    }
+
+    /**
+     * The session presented a valid token: it is no longer subject to the login deadline. Called on the lobby
+     * loop, also when the player still has to choose a nickname.
+     */
+    public void markAuthenticated(String sessionId) {
+        awaitingLogin.remove(sessionId);
     }
 
     @Override
@@ -154,15 +186,34 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
     }
 
     @Override
-    public void afterConnectionEstablished(WebSocketSession session) {
+    public void afterConnectionEstablished(WebSocketSession session) throws IOException {
+        String address = addressOf(session);
+        if (address != null
+                && connectionsPerAddress.merge(address, 1, Integer::sum) > MAX_CONNECTIONS_PER_ADDRESS) {
+            log.warn("Too many connections from {}, refusing {}", address, session.getId());
+            session.close(CloseStatus.POLICY_VIOLATION);
+            return;
+        }
+        long now = System.nanoTime();
         sessions.put(session.getId(),
                 new ConcurrentWebSocketSessionDecorator(session, SEND_TIME_LIMIT_MS, SEND_BUFFER_LIMIT_BYTES));
-        lastSeen.put(session.getId(), System.nanoTime());
+        lastSeen.put(session.getId(), now);
+        awaitingLogin.put(session.getId(), now);
         log.debug("Connection opened: {}", session.getId());
+    }
+
+    private static String addressOf(WebSocketSession session) {
+        Map<String, Object> attributes = session.getAttributes();
+        return attributes == null ? null : (String) attributes.get(ClientAddressInterceptor.CLIENT_ADDRESS);
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        String address = addressOf(session);
+        if (address != null) {
+            connectionsPerAddress.computeIfPresent(address, (key, count) -> count > 1 ? count - 1 : null);
+        }
+        awaitingLogin.remove(session.getId());
         rates.remove(session.getId());
         lastSeen.remove(session.getId());
         // Game-side cleanup (reconnection timer, session removal) runs on the lobby loop

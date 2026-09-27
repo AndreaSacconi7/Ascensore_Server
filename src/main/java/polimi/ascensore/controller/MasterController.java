@@ -81,6 +81,11 @@ public class MasterController implements GameLifeCycleListener {
 
     // Outcome of the blocking half of a login: the player, or why they cannot log in yet
     private record Login(Player player, String error, boolean needsNickname) {
+
+        // The token was valid, even if the player still has to choose a nickname
+        boolean authenticated() {
+            return player != null || needsNickname;
+        }
     }
 
     public MasterController(GameLoops loops, GameSettings settings, SupabaseAuthService authService,
@@ -154,6 +159,9 @@ public class MasterController implements GameLifeCycleListener {
             // Database or key server unreachable: the client reconnects and tries again
             sockets.closeSession(sessionId, CloseStatus.SERVER_ERROR);
             return;
+        }
+        if (login.authenticated()) {
+            sockets.markAuthenticated(sessionId);
         }
         if (login.player() == null) {
             reply(sessionId, login.needsNickname()

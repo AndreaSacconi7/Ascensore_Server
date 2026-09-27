@@ -16,8 +16,11 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     private final GameWebSocketHandler gameWebSocketHandler;
 
-    public WebSocketConfig(GameWebSocketHandler gameWebSocketHandler) {
+    private final ClientAddressInterceptor clientAddress;
+
+    public WebSocketConfig(GameWebSocketHandler gameWebSocketHandler, ClientAddressInterceptor clientAddress) {
         this.gameWebSocketHandler = gameWebSocketHandler;
+        this.clientAddress = clientAddress;
     }
 
     @Override
@@ -25,6 +28,7 @@ public class WebSocketConfig implements WebSocketConfigurer {
         // Any origin: players authenticate with a token inside the protocol, not with cookies,
         // so another site cannot act on a player's behalf through their browser
         registry.addHandler(gameWebSocketHandler, "/ws")
+                .addInterceptors(clientAddress)
                 .setAllowedOrigins("*");
     }
 

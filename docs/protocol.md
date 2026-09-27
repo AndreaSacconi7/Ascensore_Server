@@ -61,6 +61,13 @@ runs out the server acts for the player (the lowest valid bet, or the weakest va
 with a `TEXT_MESSAGE`. A player whose turns run out three times in a row is taken out of the match as if
 they had left, and receives `PLAYER_EXIT_GAME` with their own nickname.
 
+## Connection limits
+
+The first command on a socket must be `PLAYER_INFO_REQUEST`; everything except `PING` is ignored until the
+player is logged in. A socket that has not presented a valid token within 15 seconds is closed (code 1008),
+and one network address may hold at most 10 connections at a time. A player who is choosing a nickname has
+presented a valid token and is not affected.
+
 ## One device per account
 
 Logging in (`PLAYER_INFO_REQUEST`) while the same account is connected elsewhere closes the older socket

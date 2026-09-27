@@ -1,5 +1,6 @@
-# Fly.io: one machine, always on. A match lives in one server's memory (saved to Postgres after every move),
-# so the app must not be scaled to several machines or stopped when idle.
+# Fly.io: at most one machine. A match lives in one server's memory (saved to Postgres after every move), so the
+# app must never run on two machines at once. With nobody connected the machine is suspended (scale to zero):
+# the first player to connect wakes it in about a second.
 app = "ascensore-server"
 primary_region = "fra"
 
@@ -16,13 +17,17 @@ kill_timeout = 30
 
 [env]
   TURN_SECONDS = "30"
+  # Set by Fly's proxy on every request: the player's real address, for the per-address connection limit
+  CLIENT_IP_HEADER = "Fly-Client-IP"
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "off"
+  # An open WebSocket counts as traffic: the machine only sleeps once every player has disconnected, and
+  # sockets that never log in are closed after 15 s, so they cannot keep it awake
+  auto_stop_machines = "suspend"
   auto_start_machines = true
-  min_machines_running = 1
+  min_machines_running = 0
 
   [http_service.concurrency]
     type = "connections"

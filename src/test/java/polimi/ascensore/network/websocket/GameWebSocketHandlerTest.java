@@ -13,7 +13,11 @@ import polimi.ascensore.network.message.PlayerInfoResponse;
 import polimi.ascensore.network.websocket.CommandDispatcher;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -107,10 +111,52 @@ class GameWebSocketHandlerTest {
     void aSilentSessionIsClosedAsDead() throws Exception {
         WebSocketSession silent = openSession("s-silent");
         handler.afterConnectionEstablished(silent);
+        handler.markAuthenticated("s-silent");
 
-        handler.closeIdleSessions(System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(31));
+        handler.closeStaleSessions(System.nanoTime() + TimeUnit.SECONDS.toNanos(31));
 
         verify(silent).close(CloseStatus.SESSION_NOT_RELIABLE);
+    }
+
+    @Test
+    void aSocketThatDoesNotLogInIsClosed() throws Exception {
+        WebSocketSession anonymous = openSession("s-anon");
+        WebSocketSession player = openSession("s-player");
+        handler.afterConnectionEstablished(anonymous);
+        handler.afterConnectionEstablished(player);
+        handler.markAuthenticated("s-player");
+
+        // Both keep pinging, but only one ever presented a valid token
+        long later = System.nanoTime() + GameWebSocketHandler.LOGIN_TIMEOUT_NANOS + TimeUnit.SECONDS.toNanos(1);
+        handler.handleTextMessage(anonymous, PING);
+        handler.handleTextMessage(player, PING);
+        handler.closeStaleSessions(later);
+
+        verify(anonymous).close(CloseStatus.POLICY_VIOLATION);
+        verify(player, never()).close(any());
+    }
+
+    @Test
+    void oneAddressCannotOpenConnectionsWithoutLimit() throws Exception {
+        List<WebSocketSession> opened = new ArrayList<>();
+        for (int i = 0; i <= GameWebSocketHandler.MAX_CONNECTIONS_PER_ADDRESS; i++) {
+            WebSocketSession session = openSession("s-" + i, "203.0.113.7");
+            handler.afterConnectionEstablished(session);
+            opened.add(session);
+        }
+        WebSocketSession elsewhere = openSession("s-other", "198.51.100.1");
+        handler.afterConnectionEstablished(elsewhere);
+
+        verify(opened.get(opened.size() - 1)).close(CloseStatus.POLICY_VIOLATION);
+        verify(opened.get(0), never()).close(any());
+        verify(elsewhere, never()).close(any());
+
+        // A connection from that address closes: there is room for one more
+        handler.afterConnectionClosed(opened.get(0), CloseStatus.NORMAL);
+        handler.afterConnectionClosed(opened.get(opened.size() - 1), CloseStatus.POLICY_VIOLATION);
+        WebSocketSession again = openSession("s-again", "203.0.113.7");
+        handler.afterConnectionEstablished(again);
+        verify(again, never()).close(any());
     }
 
     @Test
@@ -125,6 +171,17 @@ class GameWebSocketHandlerTest {
 
         verify(commandDispatcher, times(20)).addCommandToList(any());
         verify(session).close(CloseStatus.POLICY_VIOLATION);
+    }
+
+    private static final org.springframework.web.socket.TextMessage PING =
+            new org.springframework.web.socket.TextMessage("{\"commandType\":\"PING\",\"executable\":{}}");
+
+    private static WebSocketSession openSession(String id, String address) throws IOException {
+        WebSocketSession session = openSession(id);
+        Map<String, Object> attributes = new HashMap<>();
+        attributes.put(ClientAddressInterceptor.CLIENT_ADDRESS, address);
+        when(session.getAttributes()).thenReturn(attributes);
+        return session;
     }
 
     private static WebSocketSession openSession(String id) throws IOException {
