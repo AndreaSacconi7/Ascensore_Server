@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.socket.WebSocketSession;
 import polimi.ascensore.persistence.Player;
+import polimi.ascensore.model.MatchState;
 import polimi.ascensore.model.Seed;
 import polimi.ascensore.network.message.JoinGameResponse;
 import polimi.ascensore.network.message.Message;
@@ -29,27 +30,44 @@ import static org.mockito.Mockito.*;
 
 class MasterControllerTest {
 
-    private CommandLoop commandLoop;
+    private GameLoops loops;
     private MasterController controller;
     private GameWebSocketHandler sockets;
     private SupabaseAuthService authService;
     private PlayerRepository playerRepository;
+    private final Map<String, MatchState> savedMatches = new HashMap<>();
+    private final MatchStore store = new MatchStore() {
+        @Override
+        public void save(MatchState state) {
+            savedMatches.put(state.id(), state);
+        }
+
+        @Override
+        public void delete(String matchId) {
+            savedMatches.remove(matchId);
+        }
+
+        @Override
+        public List<MatchState> loadAll() {
+            return List.copyOf(savedMatches.values());
+        }
+    };
 
     @BeforeEach
     void setUp() {
-        commandLoop = new CommandLoop();
+        loops = GameLoops.direct();
         sockets = mock(GameWebSocketHandler.class);
         authService = mock(SupabaseAuthService.class);
         playerRepository = mock(PlayerRepository.class);
         when(playerRepository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         when(sockets.isCurrentSession(anyString(), anyString())).thenReturn(true);
-        controller = new MasterController(commandLoop, new GameSettings(2, 10, 30), authService, playerRepository);
+        controller = new MasterController(loops, new GameSettings(2, 10, 30), authService, playerRepository, store);
         controller.setSocketHandler(sockets);
     }
 
     @AfterEach
     void tearDown() {
-        commandLoop.shutdown();
+        loops.shutdown();
     }
 
     ///// Commands from sessions that are not playing /////
@@ -313,6 +331,89 @@ class MasterControllerTest {
 
         assertFalse(controller.hasPendingDisconnect("uid-alice"));
         assertTrue(controller.checkIfPlayerInGame("uid-alice"));
+    }
+
+    @Test
+    void loggingInAgainWhileWaitingForAMatchGoesBackToTheMenu() {
+        Player alice = new Player("uid-alice", "alice");
+        loggedIn("s-phone", alice);
+        controller.addPlayerToGame("s-phone", 3);
+        when(sockets.currentSessionOf("alice")).thenReturn("s-phone");
+        when(authService.validateAndGetUserId("token")).thenReturn("uid-alice");
+        when(playerRepository.findBySupabaseUid("uid-alice")).thenReturn(Optional.of(alice));
+        session("s-laptop");
+
+        controller.fetchPlayerInfo("s-laptop", "token", "");
+
+        assertFalse(controller.checkIfPlayerInGame("uid-alice"));
+        verify(sockets).sendMessageToClient(argThat(m -> answer(m).isLogged() && !answer(m).isInMatch()),
+                eq("s-laptop"));
+    }
+
+    @Test
+    void unreachableDatabaseClosesTheSocketSoTheClientRetries() {
+        when(authService.validateAndGetUserId("token")).thenReturn("uid-alice");
+        when(playerRepository.findBySupabaseUid("uid-alice")).thenThrow(new RuntimeException("connection refused"));
+
+        controller.fetchPlayerInfo("s-1", "token", "");
+
+        verify(sockets).closeSession(eq("s-1"), any());
+        verify(sockets, never()).sendMessageToClient(any(), eq("s-1"));
+    }
+
+    ///// Restart /////
+
+    @Test
+    void startedMatchesAreSavedAndMatchmakingIsNot() {
+        loggedIn("s-3", new Player("uid-carol", "carol"));
+        controller.addPlayerToGame("s-3", 3);
+        assertTrue(savedMatches.isEmpty(), "a match waiting for players is not saved");
+
+        startedMatch();
+
+        assertEquals(1, savedMatches.size());
+    }
+
+    @Test
+    void afterARestartPlayersFindTheirMatchAndPickUpWhereTheyLeft() {
+        Player alice = startedMatch();
+        loops.shutdown();
+
+        // A new server process, same database
+        clearInvocations(sockets);
+        loops = GameLoops.direct();
+        controller = new MasterController(loops, new GameSettings(2, 10, 30), authService, playerRepository, store);
+        controller.setSocketHandler(sockets);
+        controller.restoreMatches();
+
+        assertTrue(controller.checkIfPlayerInGame("uid-alice"));
+        assertTrue(controller.checkIfPlayerInGame("uid-bob"));
+        assertTrue(controller.hasPendingDisconnect("uid-alice"), "players get the usual window to come back");
+
+        when(authService.validateAndGetUserId("token")).thenReturn("uid-alice");
+        when(playerRepository.findBySupabaseUid("uid-alice")).thenReturn(Optional.of(alice));
+        session("s-1-new");
+        controller.fetchPlayerInfo("s-1-new", "token", "");
+
+        assertFalse(controller.hasPendingDisconnect("uid-alice"));
+        verify(sockets).sendMessageToClient(argThat(m -> answer(m).isLogged() && answer(m).isInMatch()),
+                eq("s-1-new"));
+        verify(sockets).forwardUpdateToSingleClient(
+                argThat(m -> m.getMessageType() == MessageType.INFO_AFTER_RECONNECTION), eq("alice"));
+    }
+
+    @Test
+    void theEndOfARestoredMatchClearsItsSnapshot() {
+        startedMatch();
+        controller = new MasterController(loops, new GameSettings(2, 10, 30), authService, playerRepository, store);
+        controller.setSocketHandler(sockets);
+        controller.restoreMatches();
+        loggedIn("s-2", new Player("uid-bob", "bob"));
+
+        controller.leaveGame("s-2");
+
+        assertTrue(savedMatches.isEmpty());
+        assertFalse(controller.checkIfPlayerInGame("uid-alice"));
     }
 
     // Alice (s-1) and Bob (s-2) in a started match

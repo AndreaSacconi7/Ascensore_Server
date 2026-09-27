@@ -1,26 +1,35 @@
 package polimi.ascensore.controller;
 
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
-import polimi.ascensore.persistence.Player;
+import polimi.ascensore.auth.SupabaseAuthService;
+import polimi.ascensore.model.MatchState;
 import polimi.ascensore.model.Seed;
 import polimi.ascensore.model.exception.CannotAddPlayerNowException;
 import polimi.ascensore.network.message.*;
 import polimi.ascensore.network.websocket.GameWebSocketHandler;
+import polimi.ascensore.persistence.Player;
 import polimi.ascensore.persistence.PlayerRepository;
-import polimi.ascensore.auth.SupabaseAuthService;
 
 import java.security.SecureRandom;
 import java.time.Duration;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Server-wide state: who is logged in on which socket, matchmaking, and which match each player is in.
- * Every public method runs on the {@link CommandLoop}.
+ * <p>
+ * Every public method runs on the lobby loop (see {@link GameLoops}). Matches waiting for players belong
+ * to the lobby too; once a match starts, the lobby only talks to it through the match's own loop.
  */
 @Service
 public class MasterController implements GameLifeCycleListener {
@@ -28,13 +37,16 @@ public class MasterController implements GameLifeCycleListener {
     private static final Logger log = LoggerFactory.getLogger(MasterController.class);
 
     // How long a player who dropped mid-match has to reconnect before leaving it
-    private static final int DISCONNECT_TIMEOUT_SECONDS = 60;
+    private static final Duration DISCONNECT_TIMEOUT = Duration.ofSeconds(60);
+
+    // After a restart, the player on turn gets this much extra time while everyone reconnects
+    static final Duration RESTART_GRACE = Duration.ofSeconds(20);
 
     private static final String SESSION_PLAYER = "PLAYER";
 
     private static final CloseStatus SESSION_REPLACED_STATUS = new CloseStatus(4001, "Logged in on another device");
 
-    private final CommandLoop commandLoop;
+    private final GameLoops loops;
 
     private final GameSettings settings;
 
@@ -42,38 +54,42 @@ public class MasterController implements GameLifeCycleListener {
 
     private final PlayerRepository playerRepository;
 
+    private final MatchStore matchStore;
+
     private GameWebSocketHandler sockets;
 
     // Matches still waiting for players, oldest first
-    private final List<GameController> openMatches = new LinkedList<>();
+    private final List<Match> openMatches = new LinkedList<>();
 
-    // Player's Supabase id -> the match they are in (waiting or started)
-    private final Map<String, GameController> playerGameMap = new HashMap<>();
+    // Player's Supabase id -> the match they are in (waiting or started). Written on the lobby only; the
+    // database thread reads it during logins.
+    private final Map<String, Match> playerGameMap = new ConcurrentHashMap<>();
 
     // Pending reconnection windows: player's Supabase id -> timer
     private final Map<String, PendingDisconnect> disconnectTimers = new HashMap<>();
 
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "reconnection-timers");
-        thread.setDaemon(true);
-        return thread;
-    });
-
     private final Random random = new SecureRandom();
 
-
+    // A match and the loop it runs on once started
+    private record Match(GameController game, SerialLoop loop) {
+    }
 
     // One reconnection window. Compared by identity, so a timer that fired late cannot close a newer window.
     private static final class PendingDisconnect {
-        private ScheduledFuture<?> timer;
+        private Runnable cancel = () -> { };
     }
 
-    public MasterController(CommandLoop commandLoop, GameSettings settings, SupabaseAuthService authService,
-                            PlayerRepository playerRepository) {
-        this.commandLoop = commandLoop;
+    // Outcome of the blocking half of a login: the player, or why they cannot log in yet
+    private record Login(Player player, String error, boolean needsNickname) {
+    }
+
+    public MasterController(GameLoops loops, GameSettings settings, SupabaseAuthService authService,
+                            PlayerRepository playerRepository, MatchStore matchStore) {
+        this.loops = loops;
         this.settings = settings;
         this.authService = authService;
         this.playerRepository = playerRepository;
+        this.matchStore = matchStore;
     }
 
     public void setSocketHandler(GameWebSocketHandler gameWebSocketHandler) {
@@ -87,23 +103,38 @@ public class MasterController implements GameLifeCycleListener {
      * <p>
      * A player without a valid public nickname (a new account, or an old one whose nickname was its email
      * address) is asked to choose one; the client then repeats this request with {@code requestedNickname}.
+     * <p>
+     * Checking the token and reading the database happen on the database thread, then the login completes
+     * back on the lobby: a slow database delays logins, never the matches in progress.
      */
     public void fetchPlayerInfo(String sessionId, String token, String requestedNickname) {
+        loops.database().execute(() -> {
+            Login login;
+            try {
+                login = identify(token, requestedNickname);
+            } catch (RuntimeException e) {
+                log.error("Login on session {} failed", sessionId, e);
+                login = null;
+            }
+            Login result = login;
+            loops.lobby().execute(() -> completeLogin(sessionId, result));
+        });
+    }
+
+    // On the database thread
+    private Login identify(String token, String requestedNickname) {
         String supabaseUid = authService.validateAndGetUserId(token);
         if (supabaseUid == null) {
-            reply(sessionId, PlayerInfoResponse.rejected(PlayerInfoResponse.INVALID_TOKEN));
-            return;
+            return new Login(null, PlayerInfoResponse.INVALID_TOKEN, false);
         }
 
         Player player = playerRepository.findBySupabaseUid(supabaseUid).orElse(null);
-        boolean playerInGame = checkIfPlayerInGame(supabaseUid);
 
         // A player in the middle of a match keeps their name until the match ends
-        if (!playerInGame && (player == null || !NicknamePolicy.isValid(player.getNickname()))) {
+        if (!checkIfPlayerInGame(supabaseUid) && (player == null || !NicknamePolicy.isValid(player.getNickname()))) {
             String problem = nicknameProblem(requestedNickname);
             if (problem != null) {
-                reply(sessionId, PlayerInfoResponse.nicknameRequired(problem));
-                return;
+                return new Login(null, problem, true);
             }
             if (player == null) {
                 player = new Player(supabaseUid, requestedNickname);
@@ -114,14 +145,43 @@ public class MasterController implements GameLifeCycleListener {
             }
             player = playerRepository.save(player);
         }
+        return new Login(player, null, false);
+    }
+
+    // Back on the lobby
+    private void completeLogin(String sessionId, Login login) {
+        if (login == null) {
+            // Database or key server unreachable: the client reconnects and tries again
+            sockets.closeSession(sessionId, CloseStatus.SERVER_ERROR);
+            return;
+        }
+        if (login.player() == null) {
+            reply(sessionId, login.needsNickname()
+                    ? PlayerInfoResponse.nicknameRequired(login.error())
+                    : PlayerInfoResponse.rejected(login.error()));
+            return;
+        }
+        WebSocketSession session = sockets.getSession(sessionId);
+        if (session == null) {
+            // The socket closed while the player was being looked up
+            return;
+        }
+
+        Player player = login.player();
+        Match match = playerGameMap.get(player.getSupabaseUid());
+        if (match != null && openMatches.contains(match)) {
+            // Logged in again (on another device) while waiting for a match: back to the menu
+            leaveMatch(player.getSupabaseUid(), player.getNickname());
+            match = null;
+        }
 
         replaceOtherSession(player, sessionId);
         sockets.addNicknameToSessionIdNode(player.getNickname(), sessionId);
-        sockets.getSession(sessionId).getAttributes().put(SESSION_PLAYER, player);
-        reply(sessionId, PlayerInfoResponse.loggedIn(player.getNickname(), playerInGame));
+        session.getAttributes().put(SESSION_PLAYER, player);
+        reply(sessionId, PlayerInfoResponse.loggedIn(player.getNickname(), match != null));
 
-        if (playerInGame) {
-            handlePlayerReconnection(player, sessionId);
+        if (match != null) {
+            handlePlayerReconnection(player, match, sessionId);
         }
     }
 
@@ -149,7 +209,7 @@ public class MasterController implements GameLifeCycleListener {
         if (!NicknamePolicy.isValid(nickname)) {
             return PlayerInfoResponse.NICKNAME_INVALID;
         }
-        // Checked on the command loop, so two players cannot claim the same name at once
+        // Every login runs on the single database thread, so two players cannot claim the same name at once
         if (playerRepository.existsByNicknameIgnoreCase(nickname)) {
             return PlayerInfoResponse.NICKNAME_TAKEN;
         }
@@ -165,7 +225,7 @@ public class MasterController implements GameLifeCycleListener {
         Player player = getPlayerBySession(clientSessionId);
         if (player != null && checkIfPlayerInGame(player.getSupabaseUid())) {
             // Leaving on purpose: no reconnection window
-            leaveMatch(player);
+            leaveMatch(player.getSupabaseUid(), player.getNickname());
         }
         sockets.removeSession(clientSessionId);
     }
@@ -184,16 +244,18 @@ public class MasterController implements GameLifeCycleListener {
         }
 
         int size = settings.matchSize(requestedPlayers);
-        GameController match = joinOpenMatch(player, sessionId, size);
+        Match match = joinOpenMatch(player, sessionId, size);
         playerGameMap.put(player.getSupabaseUid(), match);
         reply(sessionId, new JoinGameResponse(true, player.getNickname(), size));
-        log.info("{} joined a {}-player match ({}/{})", player.getNickname(), size, match.getNumPlayersInGame(), size);
+        log.info("{} joined a {}-player match ({}/{})", player.getNickname(), size,
+                match.game().getNumPlayersInGame(), size);
 
-        if (match.isFull()) {
+        if (match.game().isFull()) {
             openMatches.remove(match);
-            match.startGame();
+            // From now on the match runs on its own loop
+            match.loop().execute(match.game()::startGame);
         } else {
-            match.broadcastWaitingRoom();
+            match.game().broadcastWaitingRoom();
         }
     }
 
@@ -204,31 +266,33 @@ public class MasterController implements GameLifeCycleListener {
         Player player = getPlayerBySession(sessionId);
         if (player != null && checkIfPlayerInGame(player.getSupabaseUid())) {
             log.info("{} left their match", player.getNickname());
-            leaveMatch(player);
+            leaveMatch(player.getSupabaseUid(), player.getNickname());
         }
     }
 
     // Seats the player in the oldest match of that size still waiting for players, or opens a new one
-    private GameController joinOpenMatch(Player player, String sessionId, int size) {
-        Iterator<GameController> it = openMatches.iterator();
+    private Match joinOpenMatch(Player player, String sessionId, int size) {
+        Iterator<Match> it = openMatches.iterator();
         while (it.hasNext()) {
-            GameController match = it.next();
-            if (match.getPlayersPerMatch() != size) {
+            Match match = it.next();
+            if (match.game().getPlayersPerMatch() != size) {
                 continue;
             }
             try {
-                match.addPlayerToGame(player, sessionId);
+                match.game().addPlayerToGame(player, sessionId);
                 return match;
             } catch (CannotAddPlayerNowException e) {
                 // Already started: it should not have been listed as open
                 it.remove();
             }
         }
-        GameController match = new GameController(this, sockets, size, settings.maxHandSize(), random,
-                this::scheduleOnLoop, settings.turnTime());
+        SerialLoop loop = loops.newMatchLoop();
+        GameController game = new GameController(this, sockets, size, settings.maxHandSize(), random,
+                clockOn(loop), settings.turnTime(), matchStore);
+        Match match = new Match(game, loop);
         openMatches.add(match);
         try {
-            match.addPlayerToGame(player, sessionId);
+            game.addPlayerToGame(player, sessionId);
         } catch (CannotAddPlayerNowException e) {
             throw new IllegalStateException("A new match refused its first player", e);
         }
@@ -237,26 +301,28 @@ public class MasterController implements GameLifeCycleListener {
 
     public void putCard(Seed seed, int value, String sessionId) {
         Player player = getPlayerBySession(sessionId);
-        GameController match = gameOf(player);
+        Match match = gameOf(player);
         if (match == null) {
             log.warn("PUT_CARD ignored: session {} is not in a match", sessionId);
             return;
         }
-        match.putCard(seed, value, player.getNickname());
+        String nickname = player.getNickname();
+        match.loop().execute(() -> match.game().putCard(seed, value, nickname));
     }
 
     public void setBet(int bet, String sessionId) {
         Player player = getPlayerBySession(sessionId);
-        GameController match = gameOf(player);
+        Match match = gameOf(player);
         if (match == null) {
             log.warn("SET_BET ignored: session {} is not in a match", sessionId);
             return;
         }
-        match.setBet(bet, player.getNickname());
+        String nickname = player.getNickname();
+        match.loop().execute(() -> match.game().setBet(bet, nickname));
     }
 
     // The match this player is in, or null if not logged in or not playing
-    private GameController gameOf(Player player) {
+    private Match gameOf(Player player) {
         return player == null ? null : playerGameMap.get(player.getSupabaseUid());
     }
 
@@ -264,22 +330,68 @@ public class MasterController implements GameLifeCycleListener {
         return playerGameMap.containsKey(supabaseUid);
     }
 
-    // Turn deadlines: fire on the scheduler thread, run on the command loop
-    private Runnable scheduleOnLoop(Duration delay, Runnable action) {
-        ScheduledFuture<?> timer = scheduler.schedule(() -> commandLoop.submit(action), delay.toMillis(),
-                TimeUnit.MILLISECONDS);
-        return () -> timer.cancel(false);
+    // Turn deadlines of a match: they fire on its own loop
+    private TurnClock clockOn(SerialLoop loop) {
+        return (delay, action) -> loops.schedule(delay, loop, action);
     }
+
+    // Called on the match's loop: the bookkeeping moves to the lobby
 
     @Override
     public void onPlayerRemoved(GameController gameController, String supabaseUid) {
-        playerGameMap.remove(supabaseUid, gameController);
+        loops.lobby().execute(() -> {
+            Match match = playerGameMap.get(supabaseUid);
+            if (match != null && match.game() == gameController) {
+                playerGameMap.remove(supabaseUid);
+            }
+        });
     }
 
     @Override
     public void onGameEnded(GameController gameController) {
-        playerGameMap.values().removeIf(match -> match == gameController);
-        log.info("Match ended, {} players still in a match", playerGameMap.size());
+        loops.lobby().execute(() -> {
+            playerGameMap.values().removeIf(match -> match.game() == gameController);
+            log.info("Match ended, {} players still in a match", playerGameMap.size());
+        });
+    }
+
+    ///// RESTART /////
+
+    /**
+     * Brings back the matches that were in progress when the server stopped, as saved after their last
+     * move. Runs on the lobby at startup, before players can connect: each player then has the usual
+     * reconnection window, and the player on turn some extra time.
+     */
+    public void restoreMatches() {
+        List<MatchState> saved = matchStore.loadAll();
+        for (MatchState state : saved) {
+            try {
+                SerialLoop loop = loops.newMatchLoop();
+                GameController game = GameController.restore(state, this, sockets, random, clockOn(loop),
+                        settings.turnTime(), matchStore);
+                Match match = new Match(game, loop);
+                for (MatchState.Seat seat : state.seats()) {
+                    playerGameMap.put(seat.supabaseUid(), match);
+                    onPlayerDisconnected(seat.supabaseUid(), seat.nickname());
+                }
+                loop.execute(() -> game.resume(RESTART_GRACE));
+            } catch (RuntimeException e) {
+                log.error("Could not restore match {}, dropping it", state.id(), e);
+                matchStore.delete(state.id());
+            }
+        }
+        if (!saved.isEmpty()) {
+            log.info("Restored {} matches, {} players can reconnect", saved.size(), playerGameMap.size());
+        }
+    }
+
+    /**
+     * Lets the moves already queued finish, then writes the last snapshots before the process exits.
+     */
+    @PreDestroy
+    public void shutdown() {
+        loops.shutdown();
+        matchStore.flush();
     }
 
     ///// DISCONNECTION AND RECONNECTION /////
@@ -296,70 +408,68 @@ public class MasterController implements GameLifeCycleListener {
                 && checkIfPlayerInGame(player.getSupabaseUid())) {
             if (openMatches.contains(gameOf(player))) {
                 // Nothing to resume in a match that has not started: free the seat now
-                leaveMatch(player);
+                leaveMatch(player.getSupabaseUid(), player.getNickname());
             } else {
-                onPlayerDisconnected(player.getSupabaseUid());
+                onPlayerDisconnected(player.getSupabaseUid(), player.getNickname());
             }
         }
         sockets.removeSession(sessionId);
     }
 
-    private void onPlayerDisconnected(String playerUuid) {
-        log.info("Player {} disconnected, waiting {}s for a reconnection", playerUuid, DISCONNECT_TIMEOUT_SECONDS);
+    private void onPlayerDisconnected(String supabaseUid, String nickname) {
+        log.info("{} disconnected, waiting {}s for a reconnection", nickname, DISCONNECT_TIMEOUT.toSeconds());
 
-        // The timer thread only enqueues the expiry: the cleanup itself runs on the command loop
         PendingDisconnect pending = new PendingDisconnect();
-        pending.timer = scheduler.schedule(
-                () -> commandLoop.submit(() -> onDisconnectTimeout(playerUuid, pending)),
-                DISCONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        pending.cancel = loops.schedule(DISCONNECT_TIMEOUT, loops.lobby(),
+                () -> onDisconnectTimeout(supabaseUid, nickname, pending));
 
-        PendingDisconnect previous = disconnectTimers.put(playerUuid, pending);
+        PendingDisconnect previous = disconnectTimers.put(supabaseUid, pending);
         if (previous != null) {
-            previous.timer.cancel(false);
+            previous.cancel.run();
         }
     }
 
-    private void onDisconnectTimeout(String playerUuid, PendingDisconnect pending) {
+    private void onDisconnectTimeout(String supabaseUid, String nickname, PendingDisconnect pending) {
         // The timer may have fired just before the player reconnected: then its window is already closed
-        if (!disconnectTimers.remove(playerUuid, pending)) {
+        if (!disconnectTimers.remove(supabaseUid, pending)) {
             return;
         }
-        log.info("Player {} did not reconnect in time", playerUuid);
-        playerRepository.findBySupabaseUid(playerUuid).ifPresentOrElse(
-                this::leaveMatch,
-                () -> log.error("Player {} not found in the database", playerUuid));
+        log.info("{} did not reconnect in time", nickname);
+        leaveMatch(supabaseUid, nickname);
     }
 
-    private void handlePlayerReconnection(Player player, String sessionId) {
+    private void handlePlayerReconnection(Player player, Match match, String sessionId) {
         PendingDisconnect pending = disconnectTimers.remove(player.getSupabaseUid());
         if (pending != null) {
-            pending.timer.cancel(false);
+            pending.cancel.run();
         }
         log.info("{} reconnected to their match", player.getNickname());
-        playerGameMap.get(player.getSupabaseUid()).sendAllDataAfterReconnection(player.getNickname(), sessionId);
+        String nickname = player.getNickname();
+        match.loop().execute(() -> match.game().sendAllDataAfterReconnection(nickname, sessionId));
     }
 
-    // Removes the player from their match for good: a waiting match just frees the seat, a started one ends
-    private void leaveMatch(Player player) {
-        PendingDisconnect pending = disconnectTimers.remove(player.getSupabaseUid());
+    // Removes the player from their match for good: a waiting match just frees the seat, a started one
+    // goes on without them (or ends, if they were one of the last two)
+    private void leaveMatch(String supabaseUid, String nickname) {
+        PendingDisconnect pending = disconnectTimers.remove(supabaseUid);
         if (pending != null) {
-            pending.timer.cancel(false);
+            pending.cancel.run();
         }
-        GameController match = playerGameMap.remove(player.getSupabaseUid());
+        Match match = playerGameMap.remove(supabaseUid);
         if (match == null) {
             // The match already ended while the player was away
             return;
         }
         if (openMatches.contains(match)) {
-            match.removeWaitingPlayer(player.getNickname());
-            if (match.getNumPlayersInGame() == 0) {
+            match.game().removeWaitingPlayer(nickname);
+            if (match.game().getNumPlayersInGame() == 0) {
                 openMatches.remove(match);
             } else {
-                match.broadcastWaitingRoom();
+                match.game().broadcastWaitingRoom();
             }
             return;
         }
-        match.playerExitGame(player.getNickname());
+        match.loop().execute(() -> match.game().playerExitGame(nickname));
     }
 
     private void reply(String sessionId, PlayerInfoResponse response) {

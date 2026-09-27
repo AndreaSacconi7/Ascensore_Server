@@ -132,8 +132,8 @@ public class SupabaseAuthService {
     }
 
     /**
-     * Downloads the key set with connect and read timeouts: the fetch can run on the command loop (first
-     * login, key rotation), and an unresponsive endpoint must not stall every match.
+     * Downloads the key set with connect and read timeouts: the fetch runs on the database thread (first
+     * login, key rotation), and an unresponsive endpoint must not hold up every login behind it.
      */
     private String readJwks() throws Exception {
         URI uri = URI.create(jwksUrl);

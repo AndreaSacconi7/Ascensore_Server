@@ -83,7 +83,7 @@ class GameWebSocketHandlerTest {
     }
 
     @Test
-    void closedConnectionIsHandedToTheCommandLoop() throws Exception {
+    void closedConnectionIsHandedToTheLobbyLoop() throws Exception {
         WebSocketSession session = openSession("s-1");
 
         handler.afterConnectionClosed(session, CloseStatus.GOING_AWAY);

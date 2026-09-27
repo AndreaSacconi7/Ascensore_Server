@@ -34,13 +34,22 @@ public class GamePlayer {
         this.playerState = PlayerState.IDLE;
     }
 
-    /*public GamePlayer(String nickname) {
-        this.nickname = nickname;
-        this.score = 0;
-        this.bet = 0;
-        this.hand = new ArrayList<>();
-        this.playerState = PlayerState.IDLE;
-    }*/
+    /**
+     * A player of a match restored after a restart. They have no socket until they reconnect.
+     */
+    public GamePlayer(MatchState.Seat seat) {
+        this.supabaseId = seat.supabaseUid();
+        this.nickname = seat.nickname();
+        this.score = seat.score();
+        this.bet = seat.bet();
+        this.roundsWon = seat.roundsWon();
+        this.hand = new ArrayList<>(seat.hand());
+        this.playerState = seat.state();
+    }
+
+    public MatchState.Seat toSeat() {
+        return new MatchState.Seat(supabaseId, nickname, score, bet, roundsWon, List.copyOf(hand), playerState);
+    }
 
     public void updateScore() {
         score = score + GameRules.setScore(bet, roundsWon);

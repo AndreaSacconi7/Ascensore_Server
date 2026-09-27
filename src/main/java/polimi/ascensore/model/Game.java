@@ -6,7 +6,9 @@ import polimi.ascensore.model.exception.PlayerNickNameDoesNotExist;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 /**
@@ -44,6 +46,38 @@ public class Game {
         this.betsPlaced = 0;
         this.deck = new Deck(random);
         this.tableCard = new TableCard();
+    }
+
+    /**
+     * Rebuilds a started match from a snapshot, as it was after the last move saved.
+     */
+    public static Game restore(MatchState state, Random random) {
+        Game game = new Game(state.maxHandSize(), random);
+        Map<String, GamePlayer> byNickname = new HashMap<>();
+        for (MatchState.Seat seat : state.seats()) {
+            GamePlayer player = new GamePlayer(seat);
+            game.players.add(player);
+            byNickname.put(player.getNickname(), player);
+        }
+        for (MatchState.Seat seat : state.left()) {
+            game.leftPlayers.add(new GamePlayer(seat));
+        }
+        game.setIndex = state.setIndex();
+        game.round = state.round();
+        game.betsPlaced = state.betsPlaced();
+
+        List<GamePlayer> order = new ArrayList<>();
+        for (String nickname : state.playOrder()) {
+            GamePlayer player = byNickname.get(nickname);
+            if (player == null) {
+                throw new IllegalArgumentException("Snapshot " + state.id() + ": " + nickname + " is not seated");
+            }
+            order.add(player);
+        }
+        game.tableCard.setPlayerListOrder(order);
+        game.tableCard.getPlayedCards().addAll(state.trick());
+        game.tableCard.setBriscola(state.briscola());
+        return game;
     }
 
     public void startGame() {
@@ -175,5 +209,9 @@ public class Game {
 
     public List<GamePlayer> getPlayers() {
         return players;
+    }
+
+    public List<GamePlayer> getLeftPlayers() {
+        return leftPlayers;
     }
 }

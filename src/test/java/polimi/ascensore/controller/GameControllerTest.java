@@ -7,8 +7,11 @@ import polimi.ascensore.persistence.Player;
 import polimi.ascensore.model.*;
 import polimi.ascensore.network.message.*;
 
+import com.google.gson.Gson;
+
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
@@ -79,13 +82,39 @@ class GameControllerTest {
         }
     }
 
+    /** Keeps the latest snapshot of each match, like the database would. */
+    private static final class RecordingStore implements MatchStore {
+        final Map<String, MatchState> saved = new HashMap<>();
+        int saves = 0;
+
+        @Override
+        public void save(MatchState state) {
+            saves++;
+            // Through JSON, as in the database
+            saved.put(state.id(), GSON.fromJson(GSON.toJson(state), MatchState.class));
+        }
+
+        @Override
+        public void delete(String matchId) {
+            saved.remove(matchId);
+        }
+
+        @Override
+        public List<MatchState> loadAll() {
+            return List.copyOf(saved.values());
+        }
+    }
+
+    private static final Gson GSON = new Gson();
+
     private final RecordingNotifier notifier = new RecordingNotifier();
     private final Listener listener = new Listener();
     private final FakeClock clock = new FakeClock();
+    private final RecordingStore store = new RecordingStore();
 
     private GameController startMatch(int players, int maxHandSize) throws Exception {
         GameController controller = new GameController(listener, notifier, players, maxHandSize, new Random(42),
-                clock, Duration.ofSeconds(30));
+                clock, Duration.ofSeconds(30), store);
         for (int i = 0; i < players; i++) {
             controller.addPlayerToGame(new Player("uid-" + i, "player" + i), "session-" + i);
         }
@@ -352,6 +381,74 @@ class GameControllerTest {
         assertTrue(notifier.direct.stream().anyMatch(m -> m.getMessageType() == MessageType.PLAYER_EXIT_GAME),
                 "the removed player is told");
         assertEquals(0, listener.endedMatches, "two players remain");
+    }
+
+    ///// Snapshots and restarts /////
+
+    @Test
+    void everyMoveIsSavedAndTheEndDeletesTheMatch() throws Exception {
+        GameController controller = startMatch(2, 2);
+        assertEquals(1, store.saved.size(), "saved as soon as it starts");
+
+        playToTheEnd(controller);
+
+        assertTrue(store.saves > 10);
+        assertTrue(store.saved.isEmpty(), "a finished match is not restored");
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {2, 3, 4})
+    void aRestoredMatchIsTheSameMatchAndPlaysToTheEnd(int players) throws Exception {
+        Random moves = new Random(players);
+        for (int attempt = 0; attempt < 20; attempt++) {
+            listener.endedMatches = 0;
+            store.saved.clear();
+            GameController original = startMatch(players, 4);
+            Game game = original.getGame();
+            int steps = moves.nextInt(40);
+            for (int step = 0; step < steps && listener.endedMatches == 0; step++) {
+                if (players > 2 && moves.nextInt(15) == 0 && game.getPlayers().size() > 2) {
+                    original.playerExitGame(game.getPlayers().get(0).getNickname());
+                } else {
+                    playOneMove(original, game);
+                }
+            }
+            if (listener.endedMatches > 0) {
+                continue;
+            }
+
+            MatchState saved = store.saved.get(original.getId());
+            GameController restored = GameController.restore(saved, listener, notifier, new Random(7), clock,
+                    Duration.ofSeconds(30), store);
+
+            assertEquals(GSON.toJson(original.snapshot()), GSON.toJson(restored.snapshot()));
+            restored.resume(Duration.ZERO);
+            playToTheEnd(restored);
+            assertFalse(store.saved.containsKey(original.getId()));
+        }
+    }
+
+    @Test
+    void afterARestartThePlayerOnTurnGetsExtraTime() throws Exception {
+        GameController original = startMatch(3, 10);
+        playOneMove(original, original.getGame());
+        GameController restored = GameController.restore(store.saved.get(original.getId()), listener, notifier,
+                new Random(7), clock, Duration.ofSeconds(30), store);
+
+        restored.resume(Duration.ofSeconds(20));
+
+        assertEquals(Duration.ofSeconds(50), clock.delays.get(clock.delays.size() - 1));
+        assertEquals(PlayerState.BET, active(restored.getGame()).getPlayerState());
+    }
+
+    private void playOneMove(GameController controller, Game game) {
+        GamePlayer actor = active(game);
+        if (actor.getPlayerState() == PlayerState.BET) {
+            controller.setBet(validBet(game), actor.getNickname());
+        } else {
+            Card card = validCard(game, actor);
+            controller.putCard(card.getSeed(), card.getValue(), actor.getNickname());
+        }
     }
 
     private void playUntil(GameController controller, Game game, java.util.function.BooleanSupplier done) {

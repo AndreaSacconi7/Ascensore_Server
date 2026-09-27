@@ -3,7 +3,7 @@ package polimi.ascensore.network.command;
 import polimi.ascensore.network.websocket.CommandDispatcher;
 
 /**
- * Payload of a client command. Runs on the command loop.
+ * Payload of a client command. Runs on the lobby loop.
  */
 public interface ExecutableInServer {
 

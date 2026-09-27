@@ -3,7 +3,7 @@ package polimi.ascensore.network.command;
 import polimi.ascensore.network.websocket.CommandDispatcher;
 
 /**
- * Heartbeat. Answered with PONG directly by the socket handler; it never reaches the command loop.
+ * Heartbeat. Answered with PONG directly by the socket handler; it never reaches the lobby loop.
  */
 public class Ping implements ExecutableInServer {
 

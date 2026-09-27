@@ -35,7 +35,7 @@ import java.util.concurrent.TimeUnit;
  * The WebSocket endpoint. Parses incoming commands and hands them to the {@link CommandDispatcher};
  * delivers outgoing messages to players' sessions.
  * <p>
- * Callbacks run on the container's threads, sends run on the command loop (and PONGs on the container
+ * Callbacks run on the container's threads, sends run on the lobby and match loops (and PONGs on the container
  * threads), hence the concurrent maps and the thread-safe session wrapper.
  * <p>
  * Heartbeat: clients send PING every few seconds. A session silent for longer than the idle timeout is a
@@ -52,7 +52,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
     private static final long WINDOW_NANOS = TimeUnit.SECONDS.toNanos(5);
 
     // A slow client gets its messages buffered up to these limits, then its session is closed, instead of
-    // blocking the command loop in a socket write
+    // blocking a loop in a socket write
     private static final int SEND_TIME_LIMIT_MS = 5_000;
     private static final int SEND_BUFFER_LIMIT_BYTES = 256 * 1024;
 
@@ -165,7 +165,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         rates.remove(session.getId());
         lastSeen.remove(session.getId());
-        // Game-side cleanup (reconnection timer, session removal) runs on the command loop
+        // Game-side cleanup (reconnection timer, session removal) runs on the lobby loop
         commandDispatcher.handleConnectionClosed(session.getId());
         log.debug("Connection closed: {} ({})", session.getId(), status);
     }
@@ -255,7 +255,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
         return sessionId == null ? null : sessions.get(sessionId);
     }
 
-    // Called on the command loop, on logout and when a socket closes
+    // Called on the lobby loop, on logout and when a socket closes
     public void removeSession(String sessionId) {
         // Only drop the nickname mapping if it still points here: after a reconnection it points to the new session
         nicknameToSessionId.entrySet().removeIf(entry -> entry.getValue().equals(sessionId));

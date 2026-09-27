@@ -85,3 +85,12 @@ If a player's socket drops during a match, the server keeps their seat for 60 se
 `PLAYER_INFO_REQUEST` on a new socket resumes the match with `STARTING_GAME` … `INFO_AFTER_RECONNECTION`.
 After 60 seconds the player leaves the match as above. Leaving a match that has not started frees the seat
 immediately.
+
+## Server restarts
+
+A server restart (a deploy, or a crash) closes every socket. Matches in progress are restored from their
+last saved move: to the client it looks like a dropped connection. It reconnects as usual, gets
+`PLAYER_INFO_RESPONSE` with `inMatch: true` and the table state, and play goes on; the player on turn gets
+20 extra seconds. Players who were waiting for a match are not in one after the restart
+(`inMatch: false`) and need to join again. Logging in on another device while waiting for a match also
+takes the player out of the queue.

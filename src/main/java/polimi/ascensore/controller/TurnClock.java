@@ -3,7 +3,7 @@ package polimi.ascensore.controller;
 import java.time.Duration;
 
 /**
- * Schedules turn deadlines. The action runs on the command loop, like every other state change.
+ * Schedules turn deadlines. The action runs on the match's own loop, like every other change to the match.
  */
 public interface TurnClock {
 

@@ -16,11 +16,16 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Runs one match: validates the players' moves against the rules, advances turns, tricks and sets,
- * and tells every player what changed. Only ever called from the command loop.
+ * and tells every player what changed.
+ * <p>
+ * While the match waits for players it belongs to the lobby loop; once started, it is only ever called
+ * from its own match loop. After every move the new state goes to the {@link MatchStore}, so the match
+ * can be resumed if the server restarts.
  */
 public class GameController {
 
@@ -34,6 +39,8 @@ public class GameController {
 
     // A player whose turns time out this many times in a row is taken out of the match
     static final int MAX_TIMEOUTS_IN_A_ROW = 3;
+
+    private final String id;
 
     private final Game game;
 
@@ -59,14 +66,62 @@ public class GameController {
     // nickname -> turns that timed out in a row
     private final Map<String, Integer> timeoutsInARow = new HashMap<>();
 
+    private final MatchStore store;
+
+    private boolean started;
+
+    private boolean ended;
+
     public GameController(GameLifeCycleListener gameLifeCycleListener, GameNotifier notifier,
-                          int playersPerMatch, int maxHandSize, Random random, TurnClock clock, Duration turnTime) {
-        this.game = new Game(maxHandSize, random);
+                          int playersPerMatch, int maxHandSize, Random random, TurnClock clock, Duration turnTime,
+                          MatchStore store) {
+        this(UUID.randomUUID().toString(), new Game(maxHandSize, random), gameLifeCycleListener, notifier,
+                playersPerMatch, clock, turnTime, store);
+    }
+
+    private GameController(String id, Game game, GameLifeCycleListener gameLifeCycleListener, GameNotifier notifier,
+                           int playersPerMatch, TurnClock clock, Duration turnTime, MatchStore store) {
+        this.id = id;
+        this.game = game;
         this.notifier = notifier;
         this.gameLifeCycleListener = gameLifeCycleListener;
         this.playersPerMatch = playersPerMatch;
         this.clock = clock;
         this.turnTime = turnTime;
+        this.store = store;
+    }
+
+    /**
+     * A match that was in progress when the server stopped, as it was after its last saved move.
+     * Its clock stays stopped until {@link #resume(Duration)}.
+     */
+    public static GameController restore(MatchState state, GameLifeCycleListener gameLifeCycleListener,
+                                         GameNotifier notifier, Random random, TurnClock clock, Duration turnTime,
+                                         MatchStore store) {
+        GameController controller = new GameController(state.id(), Game.restore(state, random), gameLifeCycleListener,
+                notifier, state.playersPerMatch(), clock, turnTime, store);
+        controller.timeoutsInARow.putAll(state.timeoutsInARow());
+        controller.started = true;
+        return controller;
+    }
+
+    /**
+     * Restarts the clock of a restored match: the player on turn gets a full turn plus {@code grace}, time
+     * for everyone to reconnect after the restart.
+     */
+    public void resume(Duration grace) {
+        for (GamePlayer p : playOrder()) {
+            if (p.getPlayerState() == PlayerState.BET || p.getPlayerState() == PlayerState.PUT) {
+                giveTurn(p, p.getPlayerState(), grace);
+                return;
+            }
+        }
+        log.warn("Restored match {} has nobody on turn, ending it", id);
+        endGameResult();
+    }
+
+    public String getId() {
+        return id;
     }
 
     public int getPlayersPerMatch() {
@@ -101,6 +156,7 @@ public class GameController {
     }
 
     public void startGame() {
+        started = true;
         game.startGame();
         game.distributeCards();
 
@@ -113,10 +169,12 @@ public class GameController {
             broadcast(new PlayerStateUpdate(PlayerState.WAIT, p.getNickname()), MessageType.PLAYER_STATE_UPDATE);
         }
         giveTurn(playOrder().get(0), PlayerState.BET);
+        save();
     }
 
     public void setBet(int bet, String nickname) {
         setBet(bet, nickname, false);
+        save();
     }
 
     private void setBet(int bet, String nickname, boolean automatic) {
@@ -157,6 +215,7 @@ public class GameController {
 
     public void putCard(Seed seed, int value, String nickname) {
         putCard(seed, value, nickname, false);
+        save();
     }
 
     private void putCard(Seed seed, int value, String nickname, boolean automatic) {
@@ -213,6 +272,11 @@ public class GameController {
      * current trick, and if it was their turn it passes on. With one player left, the match ends.
      */
     public void playerExitGame(String nickname) {
+        exitGame(nickname);
+        save();
+    }
+
+    private void exitGame(String nickname) {
         GamePlayer leaver = findPlayer(nickname);
         if (leaver == null) {
             return;
@@ -355,15 +419,17 @@ public class GameController {
     }
 
     private void endGameResult() {
+        ended = true;
         cancelTurnTimer.run();
+        store.delete(id);
         Map<String, Integer> resultAndScore = new LinkedHashMap<>();
         for (GamePlayer p : game.endGame()) {
             resultAndScore.put(p.getNickname(), p.getPlayerState() == PlayerState.EXIT ? EXIT_SCORE : p.getScore());
         }
-        broadcast(new EndGame(resultAndScore), MessageType.END_GAME);
-
-        // Lets the master controller forget this match
+        // The master controller forgets this match before the players hear it ended, so that they can join
+        // another one straight away
         gameLifeCycleListener.onGameEnded(this);
+        broadcast(new EndGame(resultAndScore), MessageType.END_GAME);
     }
 
     private void notifyDistributedCards() {
@@ -388,7 +454,10 @@ public class GameController {
             millisLeft = limit.toMillis();
             turnDeadlineNanos = System.nanoTime() + limit.toNanos();
             String nickname = player.getNickname();
-            cancelTurnTimer = clock.schedule(limit, () -> onTurnTimeout(seq, nickname));
+            cancelTurnTimer = clock.schedule(limit, () -> {
+                onTurnTimeout(seq, nickname);
+                save();
+            });
         }
         broadcast(new PlayerStateUpdate(state, player.getNickname(), millisLeft, turnTime.toMillis()),
                 MessageType.PLAYER_STATE_UPDATE);
@@ -407,11 +476,11 @@ public class GameController {
         int timeouts = timeoutsInARow.merge(nickname, 1, Integer::sum);
         if (timeouts >= MAX_TIMEOUTS_IN_A_ROW) {
             log.info("{} let {} turns in a row time out, removing them", nickname, timeouts);
-            String supabaseUid = player.getSupabaseId();
-            // Tell the player first: once removed they no longer receive the match's messages
+            // Freed for matchmaking before they hear about it, so they can join another match at once
+            gameLifeCycleListener.onPlayerRemoved(this, player.getSupabaseId());
+            // Tell the player before removing them: once out they no longer receive the match's messages
             sendTo(nickname, new PlayerExitGame(nickname), MessageType.PLAYER_EXIT_GAME);
-            playerExitGame(nickname);
-            gameLifeCycleListener.onPlayerRemoved(this, supabaseUid);
+            exitGame(nickname);
             return;
         }
         if (player.getPlayerState() == PlayerState.BET) {
@@ -454,6 +523,24 @@ public class GameController {
             return 0;
         }
         return Math.max(0, TimeUnit.NANOSECONDS.toMillis(turnDeadlineNanos - System.nanoTime()));
+    }
+
+    // Hands the state after this move to the store, which writes it in the background
+    private void save() {
+        if (started && !ended) {
+            store.save(snapshot());
+        }
+    }
+
+    MatchState snapshot() {
+        return new MatchState(MatchState.VERSION, id, playersPerMatch, game.getMaxHandSize(), game.getSetsPlayed(),
+                game.getRound(), game.getBetsPlaced(),
+                game.getPlayers().stream().map(GamePlayer::toSeat).toList(),
+                game.getLeftPlayers().stream().map(GamePlayer::toSeat).toList(),
+                nicknamesInPlayOrder(),
+                List.copyOf(game.getTableCard().getPlayedCards()),
+                game.getTableCard().getBriscola(),
+                Map.copyOf(timeoutsInARow));
     }
 
     private void endTurn(GamePlayer player) {

@@ -1,42 +1,42 @@
 package polimi.ascensore.network.websocket;
 
 import org.springframework.stereotype.Service;
-import polimi.ascensore.controller.CommandLoop;
+import polimi.ascensore.controller.GameLoops;
 import polimi.ascensore.controller.MasterController;
 import polimi.ascensore.model.Seed;
 import polimi.ascensore.network.command.Command;
 
 /**
- * Bridge between the socket threads and the game: queues every command on the {@link CommandLoop} and,
- * once there, routes it to the {@link MasterController}.
+ * Bridge between the socket threads and the game: queues every command on the lobby loop (see
+ * {@link GameLoops}) and, once there, routes it to the {@link MasterController}.
  */
 @Service
 public class CommandDispatcher {
 
     private final MasterController masterController;
 
-    private final CommandLoop commandLoop;
+    private final GameLoops loops;
 
-    public CommandDispatcher(MasterController masterController, CommandLoop commandLoop) {
+    public CommandDispatcher(MasterController masterController, GameLoops loops) {
         this.masterController = masterController;
-        this.commandLoop = commandLoop;
+        this.loops = loops;
     }
 
-    // Called on WebSocket container threads: the command itself only ever runs on the command loop.
+    // Called on WebSocket container threads: the command itself only ever runs on the lobby loop.
     public void addCommandToList(Command command) {
-        commandLoop.submit(() -> command.getExecutable().execute(this));
+        loops.lobby().execute(() -> command.getExecutable().execute(this));
     }
 
     // Queued behind any command the session already sent, so those are processed before its cleanup.
     public void handleConnectionClosed(String sessionId) {
-        commandLoop.submit(() -> masterController.handleConnectionClosed(sessionId));
+        loops.lobby().execute(() -> masterController.handleConnectionClosed(sessionId));
     }
 
     public void setSocketHandler(GameWebSocketHandler socketHandler) {
         masterController.setSocketHandler(socketHandler);
     }
 
-    // Called by the commands, on the command loop
+    // Called by the commands, on the lobby loop
 
     public void fetchPlayerInfo(String sessionId, String token, String nickname) {
         masterController.fetchPlayerInfo(sessionId, token, nickname);
