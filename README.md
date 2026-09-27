@@ -4,6 +4,9 @@ Authoritative multiplayer server for **Ascensore**, a traditional Italian trick-
 **Java 17 / Spring Boot** and **WebSockets**. The Flutter client lives in
 [Ascensore_Card_Game](https://github.com/AndreaSacconi7/Ascensore_Card_Game).
 
+**Live:** the game at [andreasacconi7.github.io/Ascensore_Card_Game](https://andreasacconi7.github.io/Ascensore_Card_Game/)
+plays on this server, deployed on Fly.io (`wss://ascensore-server.fly.dev/ws`).
+
 ## The game
 
 Played with the 40-card Italian deck by 2–4 players; each player picks the match size and matchmaking keeps a queue per size. The hand size goes **up from 1 to 10 cards and back down
