@@ -115,8 +115,10 @@ on one server) and checks `/health`. With [flyctl](https://fly.io/docs/flyctl/) 
 ```bash
 fly launch --no-deploy --copy-config
 fly secrets set SUPABASE_JWT_URL=... SUPABASE_DB_URL=... SUPABASE_DB_USER=... SUPABASE_DB_PASSWORD=...
-fly deploy
+fly deploy --ha=false
 ```
+
+`--ha=false` matters: by default Fly starts two machines, and two servers would each run their own matches.
 
 Clients then connect to `wss://<app>.fly.dev/ws`. A deploy stops the old machine and starts the new one;
 matches in progress are restored and players reconnect on their own.

@@ -1,0 +1,41 @@
+# Fly.io: one machine, always on. A match lives in one server's memory (saved to Postgres after every move),
+# so the app must not be scaled to several machines or stopped when idle.
+app = "ascensore-server"
+primary_region = "fra"
+
+# Spring shuts down cleanly on SIGTERM: queued moves finish and the last snapshots are written
+kill_signal = "SIGTERM"
+kill_timeout = 30
+
+[build]
+
+[deploy]
+  # The machine is updated in place: the old server stops before the new one starts, so two servers never
+  # restore the same matches (do not switch to bluegreen)
+  strategy = "rolling"
+
+[env]
+  TURN_SECONDS = "30"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    soft_limit = 1500
+    hard_limit = 2000
+
+  [[http_service.checks]]
+    grace_period = "40s"
+    interval = "15s"
+    timeout = "5s"
+    method = "GET"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
