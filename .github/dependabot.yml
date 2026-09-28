@@ -1,11 +1,15 @@
-# Weekly pull requests for outdated dependencies and base images
+# Weekly pull requests for outdated dependencies; the CI workflow tests each one.
+#
+# No Docker updates: the Dockerfile's images use tags that follow Java 17 (17-jre, 3.9-eclipse-temurin-17),
+# so every build already gets their patches, and Dependabot could only propose moving to newer Java releases,
+# most of which are short-lived. Java moves to the next LTS (21, 25) by hand.
 version: 2
 updates:
   - package-ecosystem: maven
     directory: /
     schedule:
       interval: weekly
-  - package-ecosystem: docker
+  - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
