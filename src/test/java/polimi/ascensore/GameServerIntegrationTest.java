@@ -15,6 +15,7 @@ import java.math.BigInteger;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.WebSocket;
+import java.net.http.WebSocketHandshakeException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.KeyPair;
@@ -27,7 +28,9 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -161,6 +164,24 @@ class GameServerIntegrationTest {
         client.await("PONG");
     }
 
+    @Test
+    void loggingOutClosesTheSocket() throws Exception {
+        Client client = loggedIn("uid-leaver", "leaver");
+
+        client.send(command("LOGOUT", "{}"));
+
+        assertEquals(1000, client.closed.get(5, TimeUnit.SECONDS));
+    }
+
+    @Test
+    void onlyTheGamePagesCanConnectFromABrowser() throws Exception {
+        assertNotNull(connect("https://andreasacconi7.github.io"));
+
+        ExecutionException refused = assertThrows(ExecutionException.class, () -> connect("https://evil.example"));
+        assertInstanceOf(WebSocketHandshakeException.class, refused.getCause());
+        assertEquals(403, ((WebSocketHandshakeException) refused.getCause()).getResponse().statusCode());
+    }
+
     ///// Helpers /////
 
     private Client loggedIn(String uid, String nickname) throws Exception {
@@ -170,10 +191,19 @@ class GameServerIntegrationTest {
         return client;
     }
 
+    // Like an app: no Origin header
     private Client connect() throws Exception {
+        return connect(null);
+    }
+
+    // Like a browser on the page at [origin]
+    private Client connect(String origin) throws Exception {
         Client client = new Client();
-        client.socket = HttpClient.newHttpClient().newWebSocketBuilder()
-                .buildAsync(URI.create("ws://localhost:" + port + "/ws"), client)
+        WebSocket.Builder builder = HttpClient.newHttpClient().newWebSocketBuilder();
+        if (origin != null) {
+            builder.header("Origin", origin);
+        }
+        client.socket = builder.buildAsync(URI.create("ws://localhost:" + port + "/ws"), client)
                 .get(5, TimeUnit.SECONDS);
         clients.add(client);
         return client;
@@ -216,6 +246,8 @@ class GameServerIntegrationTest {
     private static final class Client implements WebSocket.Listener {
         private final BlockingQueue<JsonObject> inbox = new LinkedBlockingQueue<>();
         private final StringBuilder partial = new StringBuilder();
+        // Status code of the server's close
+        private final CompletableFuture<Integer> closed = new CompletableFuture<>();
         private WebSocket socket;
 
         void send(String text) {
@@ -247,6 +279,12 @@ class GameServerIntegrationTest {
                 partial.setLength(0);
             }
             webSocket.request(1);
+            return null;
+        }
+
+        @Override
+        public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+            closed.complete(statusCode);
             return null;
         }
     }

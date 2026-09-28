@@ -16,7 +16,7 @@ arrives on, never by a field in the payload.
 | `LEAVE_GAME_REQUEST` | – | Leave matchmaking, or the match in progress for good (see *Leaving a match*). |
 | `SET_BET` | `bet` | Bet how many tricks you will take this set. |
 | `PUT_CARD` | `seed`, `value` | Play a card. |
-| `LOGOUT` | – | Leave the current match (if any) and close the session. |
+| `LOGOUT` | – | Leave the current match (if any) and close the session; the server then closes the socket (code 1000). |
 | `PING` | – | Heartbeat, every ~10 s. Answered with `PONG`. A session silent for 30 s is closed as dead. |
 
 ## Messages (server → client)
@@ -67,6 +67,13 @@ The first command on a socket must be `PLAYER_INFO_REQUEST`; everything except `
 player is logged in. A socket that has not presented a valid token within 15 seconds is closed (code 1008),
 and one network address may hold at most 10 connections at a time. A player who is choosing a nickname has
 presented a valid token and is not affected.
+
+A socket may send `PLAYER_INFO_REQUEST` at most 10 times (the login, then one per nickname tried) before it is
+closed (code 1008); once logged in, further ones are ignored. When the server is flooded with logins it closes
+new ones with code 1013 (try again later): the client reconnects as after any drop.
+
+Browsers may only connect from the game's own pages (the `Origin` header, see `ALLOWED_ORIGINS`); apps send no
+`Origin` and are not affected.
 
 ## One device per account
 

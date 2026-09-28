@@ -47,7 +47,8 @@ public class GameLoops {
                 Executors.newSingleThreadExecutor(daemon("database")));
     }
 
-    private GameLoops(Executor workers, Executor database) {
+    // Visible for tests
+    GameLoops(Executor workers, Executor database) {
         this.workers = workers;
         this.database = database;
         this.lobby = new SerialLoop(workers);

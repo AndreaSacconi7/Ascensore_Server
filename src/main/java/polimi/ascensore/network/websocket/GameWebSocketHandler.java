@@ -57,6 +57,10 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
     // Clients identify right after connecting; the margin covers a slow token refresh
     static final long LOGIN_TIMEOUT_NANOS = TimeUnit.SECONDS.toNanos(15);
 
+    // PLAYER_INFO_REQUESTs on one socket: the login, then one per nickname tried. Every one costs a token check
+    // and a database lookup, so a socket that keeps sending them is flooding the database
+    static final int MAX_LOGIN_ATTEMPTS = 10;
+
     // A household or a classroom behind one address still fits; a script opening sockets in a loop does not
     static final int MAX_CONNECTIONS_PER_ADDRESS = 10;
     private static final long WINDOW_NANOS = TimeUnit.SECONDS.toNanos(5);
@@ -76,6 +80,9 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
 
     // sessionId -> commands received in the current rate window
     private final Map<String, RateWindow> rates = new ConcurrentHashMap<>();
+
+    // sessionId -> PLAYER_INFO_REQUESTs received
+    private final Map<String, Integer> loginAttempts = new ConcurrentHashMap<>();
 
     // sessionId -> System.nanoTime() of the last message received
     private final Map<String, Long> lastSeen = new ConcurrentHashMap<>();
@@ -164,6 +171,13 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
                 send(getSession(session.getId()), new TextMessage(PONG), session.getId());
                 return;
             }
+            if (command.getCommandType() == CommandType.PLAYER_INFO_REQUEST
+                    && loginAttempts.merge(session.getId(), 1, Integer::sum) > MAX_LOGIN_ATTEMPTS) {
+                log.warn("Session {} tried to log in more than {} times, closing it", session.getId(),
+                        MAX_LOGIN_ATTEMPTS);
+                session.close(CloseStatus.POLICY_VIOLATION);
+                return;
+            }
             // Payloads are not logged: PLAYER_INFO_REQUEST carries the player's access token
             log.debug("Received {} from {}", command.getCommandType(), session.getId());
             command.setClientSessionId(session.getId());
@@ -215,6 +229,7 @@ public class GameWebSocketHandler extends TextWebSocketHandler implements GameNo
         }
         awaitingLogin.remove(session.getId());
         rates.remove(session.getId());
+        loginAttempts.remove(session.getId());
         lastSeen.remove(session.getId());
         // Game-side cleanup (reconnection timer, session removal) runs on the lobby loop
         commandDispatcher.handleConnectionClosed(session.getId());

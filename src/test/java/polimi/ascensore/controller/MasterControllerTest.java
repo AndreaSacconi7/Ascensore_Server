@@ -3,6 +3,8 @@ package polimi.ascensore.controller;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
 import polimi.ascensore.persistence.Player;
 import polimi.ascensore.model.MatchState;
@@ -16,6 +18,7 @@ import polimi.ascensore.network.websocket.GameWebSocketHandler;
 import polimi.ascensore.persistence.PlayerRepository;
 import polimi.ascensore.auth.SupabaseAuthService;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -156,6 +159,79 @@ class MasterControllerTest {
         controller.fetchPlayerInfo("s-1", "token", "alice");
         assertEquals("alice", legacy.getNickname());
         verify(playerRepository).save(legacy);
+    }
+
+    @Test
+    void playerSharingTheirNicknameWithAnotherAccountMustChooseANewOne() {
+        Player legacy = new Player("uid-old", "alice");
+        when(authService.validateAndGetUserId("token")).thenReturn("uid-old");
+        when(playerRepository.findBySupabaseUid("uid-old")).thenReturn(Optional.of(legacy));
+        when(playerRepository.countByNicknameIgnoreCase("alice")).thenReturn(2L);
+        session("s-1");
+
+        controller.fetchPlayerInfo("s-1", "token", "");
+        verifyNicknameRequired("s-1", PlayerInfoResponse.NICKNAME_MISSING);
+
+        controller.fetchPlayerInfo("s-1", "token", "alice_2");
+        assertEquals("alice_2", legacy.getNickname());
+        verify(playerRepository).save(legacy);
+        assertEquals(legacy, controller.getPlayerBySession("s-1"));
+    }
+
+    @Test
+    void nicknameRefusedByTheDatabaseIsTaken() {
+        newAccount("uid-new");
+        when(playerRepository.save(any())).thenThrow(new DataIntegrityViolationException("player_nickname_lower_key"));
+        session("s-1");
+
+        controller.fetchPlayerInfo("s-1", "token", "alice");
+
+        verifyNicknameRequired("s-1", PlayerInfoResponse.NICKNAME_TAKEN);
+        assertNull(controller.getPlayerBySession("s-1"));
+    }
+
+    @Test
+    void aSocketAlreadyLoggedInCannotLogInAgain() {
+        loggedIn("s-1", new Player("uid-alice", "alice"));
+
+        controller.fetchPlayerInfo("s-1", "token", "");
+
+        verify(authService, never()).validateAndGetUserId(any());
+        verify(sockets, never()).sendMessageToClient(any(), eq("s-1"));
+    }
+
+    @Test
+    void loginsBeyondWhatTheDatabaseCanQueueAreTurnedAway() {
+        // The database thread is stuck: logins pile up behind it
+        List<Runnable> database = new ArrayList<>();
+        loops.shutdown();
+        loops = new GameLoops(Runnable::run, database::add);
+        controller = new MasterController(loops, new GameSettings(2, 10, 30), authService, playerRepository, store);
+        controller.setSocketHandler(sockets);
+        for (int i = 0; i < MasterController.MAX_PENDING_LOGINS; i++) {
+            controller.fetchPlayerInfo("s-" + i, "token", "");
+        }
+        verify(sockets, never()).closeSession(any(), any());
+
+        controller.fetchPlayerInfo("s-late", "token", "");
+        verify(sockets).closeSession("s-late", CloseStatus.SERVICE_OVERLOAD);
+        assertEquals(MasterController.MAX_PENDING_LOGINS, database.size());
+
+        // Once the database catches up there is room again
+        database.remove(0).run();
+        controller.fetchPlayerInfo("s-retry", "token", "");
+        assertEquals(MasterController.MAX_PENDING_LOGINS, database.size());
+        verify(sockets, never()).closeSession(eq("s-retry"), any());
+    }
+
+    @Test
+    void loggingOutClosesTheSocket() {
+        loggedIn("s-1", new Player("uid-alice", "alice"));
+
+        controller.logout("s-1");
+
+        verify(sockets).closeSession("s-1", CloseStatus.NORMAL);
+        verify(sockets).removeSession("s-1");
     }
 
     @Test

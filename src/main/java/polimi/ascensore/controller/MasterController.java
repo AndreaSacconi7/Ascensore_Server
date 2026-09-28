@@ -3,6 +3,7 @@ package polimi.ascensore.controller;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
@@ -46,6 +47,10 @@ public class MasterController implements GameLifeCycleListener {
 
     private static final CloseStatus SESSION_REPLACED_STATUS = new CloseStatus(4001, "Logged in on another device");
 
+    // Logins queued for the database thread. Beyond this the server is being flooded: further logins are turned
+    // away (the client reconnects and retries) rather than queued without limit
+    static final int MAX_PENDING_LOGINS = 100;
+
     private final GameLoops loops;
 
     private final GameSettings settings;
@@ -69,6 +74,9 @@ public class MasterController implements GameLifeCycleListener {
     private final Map<String, PendingDisconnect> disconnectTimers = new HashMap<>();
 
     private final Random random = new SecureRandom();
+
+    // Logins handed to the database thread and not completed yet
+    private int pendingLogins;
 
     // A match and the loop it runs on once started
     private record Match(GameController game, SerialLoop loop) {
@@ -111,8 +119,20 @@ public class MasterController implements GameLifeCycleListener {
      * <p>
      * Checking the token and reading the database happen on the database thread, then the login completes
      * back on the lobby: a slow database delays logins, never the matches in progress.
+     * <p>
+     * A socket that is already logged in is ignored: logging in again would only cost a database round trip.
      */
     public void fetchPlayerInfo(String sessionId, String token, String requestedNickname) {
+        if (getPlayerBySession(sessionId) != null) {
+            log.warn("PLAYER_INFO_REQUEST ignored: session {} is already logged in", sessionId);
+            return;
+        }
+        if (pendingLogins >= MAX_PENDING_LOGINS) {
+            log.warn("{} logins already waiting for the database, turning away session {}", pendingLogins, sessionId);
+            sockets.closeSession(sessionId, CloseStatus.SERVICE_OVERLOAD);
+            return;
+        }
+        pendingLogins++;
         loops.database().execute(() -> {
             Login login;
             try {
@@ -122,7 +142,10 @@ public class MasterController implements GameLifeCycleListener {
                 login = null;
             }
             Login result = login;
-            loops.lobby().execute(() -> completeLogin(sessionId, result));
+            loops.lobby().execute(() -> {
+                pendingLogins--;
+                completeLogin(sessionId, result);
+            });
         });
     }
 
@@ -136,7 +159,7 @@ public class MasterController implements GameLifeCycleListener {
         Player player = playerRepository.findBySupabaseUid(supabaseUid).orElse(null);
 
         // A player in the middle of a match keeps their name until the match ends
-        if (!checkIfPlayerInGame(supabaseUid) && (player == null || !NicknamePolicy.isValid(player.getNickname()))) {
+        if (!checkIfPlayerInGame(supabaseUid) && (player == null || !hasOwnNickname(player))) {
             String problem = nicknameProblem(requestedNickname);
             if (problem != null) {
                 return new Login(null, problem, true);
@@ -148,9 +171,24 @@ public class MasterController implements GameLifeCycleListener {
                 player.setNickname(requestedNickname);
                 log.info("Player {} chose a public nickname", requestedNickname);
             }
-            player = playerRepository.save(player);
+            try {
+                player = playerRepository.save(player);
+            } catch (DataIntegrityViolationException e) {
+                // The database's unique index on nicknames refused it
+                return new Login(null, PlayerInfoResponse.NICKNAME_TAKEN, true);
+            }
         }
         return new Login(player, null, false);
+    }
+
+    /**
+     * True if the player's nickname is valid and no other account holds it. Messages are routed by nickname,
+     * so two accounts sharing one (rows saved before nicknames were unique) would receive each other's cards:
+     * both are asked to choose again, and the first to do so leaves the name to the other.
+     */
+    private boolean hasOwnNickname(Player player) {
+        return NicknamePolicy.isValid(player.getNickname())
+                && playerRepository.countByNicknameIgnoreCase(player.getNickname()) <= 1;
     }
 
     // Back on the lobby
@@ -235,6 +273,9 @@ public class MasterController implements GameLifeCycleListener {
             // Leaving on purpose: no reconnection window
             leaveMatch(player.getSupabaseUid(), player.getNickname());
         }
+        // The socket goes too (the client closes it anyway): once forgotten, the idle and login deadlines no
+        // longer watch it, and it could stay open for good
+        sockets.closeSession(clientSessionId, CloseStatus.NORMAL);
         sockets.removeSession(clientSessionId);
     }
 

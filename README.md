@@ -100,6 +100,11 @@ Requires Java 17+ and a Supabase project (Auth + Postgres).
 | `MAX_HAND_SIZE` | Largest hand (default 10); lower it for quick test matches |
 | `TURN_SECONDS` | Time to bet or play before the server acts for the player (default 30, 0 = no limit) |
 | `PORT` | HTTP port (default 8080) |
+| `ALLOWED_ORIGINS` | Web pages allowed to connect from a browser, comma-separated (default the GitHub Pages site and `localhost`) |
+
+At startup the server turns on Row Level Security on its tables and revokes Supabase's client roles
+(`anon`, `authenticated`), so the public key shipped in the client cannot read them; if it cannot, it refuses
+to start. It also adds a unique index on nicknames (ignoring case).
 
 Saved matches older than two hours are discarded at startup (`ascensore.snapshot-max-age-minutes`).
 
@@ -148,9 +153,10 @@ matches in progress are restored and players reconnect on their own.
   not hold up the others
 - `JpaMatchStoreTest` — snapshots on the real schema: latest state wins, ended matches go, stale ones are
   discarded
-- `GameWebSocketHandlerTest` — broadcasts survive dead sessions, heartbeat, flood protection
+- `GameWebSocketHandlerTest` — broadcasts survive dead sessions, heartbeat, flood protection, login attempts
+- `SupabaseTablesTest` — Row Level Security is turned on, or the server does not start
 - `GameServerIntegrationTest` — the real server over WebSockets with signed tokens: nickname choice, a match
-  start, a dropped connection and the reconnection
+  start, a dropped connection and the reconnection, logout, and which web pages may connect
 
 ## Known limitations
 

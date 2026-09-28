@@ -173,6 +173,21 @@ class GameWebSocketHandlerTest {
         verify(session).close(CloseStatus.POLICY_VIOLATION);
     }
 
+    @Test
+    void socketThatKeepsLoggingInIsClosed() throws Exception {
+        WebSocketSession session = openSession("s-login");
+        handler.afterConnectionEstablished(session);
+        org.springframework.web.socket.TextMessage login = new org.springframework.web.socket.TextMessage(
+                "{\"commandType\":\"PLAYER_INFO_REQUEST\",\"executable\":{\"token\":\"t\",\"nickname\":\"\"}}");
+
+        for (int i = 0; i <= GameWebSocketHandler.MAX_LOGIN_ATTEMPTS; i++) {
+            handler.handleTextMessage(session, login);
+        }
+
+        verify(commandDispatcher, times(GameWebSocketHandler.MAX_LOGIN_ATTEMPTS)).addCommandToList(any());
+        verify(session).close(CloseStatus.POLICY_VIOLATION);
+    }
+
     private static final org.springframework.web.socket.TextMessage PING =
             new org.springframework.web.socket.TextMessage("{\"commandType\":\"PING\",\"executable\":{}}");
 

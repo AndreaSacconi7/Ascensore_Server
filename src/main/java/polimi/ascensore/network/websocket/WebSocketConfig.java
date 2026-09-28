@@ -1,5 +1,6 @@
 package polimi.ascensore.network.websocket;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
@@ -18,18 +19,23 @@ public class WebSocketConfig implements WebSocketConfigurer {
 
     private final ClientAddressInterceptor clientAddress;
 
-    public WebSocketConfig(GameWebSocketHandler gameWebSocketHandler, ClientAddressInterceptor clientAddress) {
+    private final String[] allowedOrigins;
+
+    public WebSocketConfig(GameWebSocketHandler gameWebSocketHandler, ClientAddressInterceptor clientAddress,
+                           @Value("${ascensore.allowed-origins}") String[] allowedOrigins) {
         this.gameWebSocketHandler = gameWebSocketHandler;
         this.clientAddress = clientAddress;
+        this.allowedOrigins = allowedOrigins;
     }
 
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        // Any origin: players authenticate with a token inside the protocol, not with cookies,
-        // so another site cannot act on a player's behalf through their browser
+        // Players authenticate with a token inside the protocol, not with cookies, so another site cannot act
+        // on a player's behalf. Still, only the game's own pages may open sockets from a browser, so no other
+        // site can have its visitors' browsers connect here. Apps send no Origin and are not affected.
         registry.addHandler(gameWebSocketHandler, "/ws")
                 .addInterceptors(clientAddress)
-                .setAllowedOrigins("*");
+                .setAllowedOriginPatterns(allowedOrigins);
     }
 
     @Bean

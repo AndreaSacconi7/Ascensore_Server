@@ -12,4 +12,6 @@ public interface PlayerRepository extends JpaRepository<Player, Long> {
     Optional<Player> findBySupabaseUid(String supabaseUid);
 
     boolean existsByNicknameIgnoreCase(String nickname);
+
+    long countByNicknameIgnoreCase(String nickname);
 }

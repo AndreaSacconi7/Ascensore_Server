@@ -31,6 +31,7 @@ public class ServerStartup implements SmartInitializingSingleton {
     @Override
     public void afterSingletonsInstantiated() {
         tables.lockDown();
+        tables.enforceUniqueNicknames();
         CompletableFuture.runAsync(masterController::restoreMatches, loops.lobby()).join();
     }
 }

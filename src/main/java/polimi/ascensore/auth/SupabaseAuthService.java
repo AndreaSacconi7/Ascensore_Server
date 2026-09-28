@@ -1,7 +1,8 @@
 package polimi.ascensore.auth;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwsHeader;
 import io.jsonwebtoken.Jwts;
@@ -121,14 +122,21 @@ public class SupabaseAuthService {
     }
 
     private Map<String, PublicKey> fetchKeys() throws Exception {
-        JsonNode root = new ObjectMapper().readTree(readJwks());
+        JsonObject root = JsonParser.parseString(readJwks()).getAsJsonObject();
         Map<String, PublicKey> fetched = new HashMap<>();
-        for (JsonNode key : root.get("keys")) {
-            if ("EC".equals(key.path("kty").asText()) && "P-256".equals(key.path("crv").asText())) {
-                fetched.put(key.path("kid").asText(), ecPublicKey(key.get("x").asText(), key.get("y").asText()));
+        for (JsonElement element : root.getAsJsonArray("keys")) {
+            JsonObject key = element.getAsJsonObject();
+            if ("EC".equals(text(key, "kty")) && "P-256".equals(text(key, "crv"))) {
+                fetched.put(text(key, "kid"), ecPublicKey(key.get("x").getAsString(), key.get("y").getAsString()));
             }
         }
         return Map.copyOf(fetched);
+    }
+
+    // A member's string value, or "" if absent
+    private static String text(JsonObject object, String member) {
+        JsonElement value = object.get(member);
+        return value == null || value.isJsonNull() ? "" : value.getAsString();
     }
 
     /**
