@@ -3,7 +3,6 @@ package polimi.ascensore;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -211,10 +210,10 @@ class GameServerIntegrationTest {
 
     private static String playerInfoRequest(String uid, String nickname) {
         String token = Jwts.builder()
-                .setHeaderParam("kid", "test-key")
-                .setSubject(uid)
-                .setExpiration(new Date(System.currentTimeMillis() + 60_000))
-                .signWith(SIGNING_KEY.getPrivate(), SignatureAlgorithm.ES256)
+                .header().keyId("test-key").and()
+                .subject(uid)
+                .expiration(new Date(System.currentTimeMillis() + 60_000))
+                .signWith(SIGNING_KEY.getPrivate(), Jwts.SIG.ES256)
                 .compact();
         return command("PLAYER_INFO_REQUEST", "{\"token\":\"" + token + "\",\"nickname\":\"" + nickname + "\"}");
     }

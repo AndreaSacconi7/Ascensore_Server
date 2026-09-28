@@ -6,7 +6,7 @@ import com.google.gson.JsonParser;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwsHeader;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SigningKeyResolverAdapter;
+import io.jsonwebtoken.LocatorAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import jakarta.annotation.PostConstruct;
@@ -79,16 +79,16 @@ public class SupabaseAuthService {
             cleanToken = cleanToken.substring("Bearer ".length()).trim();
         }
         try {
-            Claims claims = Jwts.parserBuilder()
-                    .setSigningKeyResolver(new SigningKeyResolverAdapter() {
+            Claims claims = Jwts.parser()
+                    .keyLocator(new LocatorAdapter<Key>() {
                         @Override
-                        public Key resolveSigningKey(JwsHeader header, Claims claims) {
+                        protected Key locate(JwsHeader header) {
                             return keyFor(header.getKeyId());
                         }
                     })
                     .build()
-                    .parseClaimsJws(cleanToken)
-                    .getBody();
+                    .parseSignedClaims(cleanToken)
+                    .getPayload();
             return claims.getSubject();
         } catch (RuntimeException e) {
             log.info("Token rejected: {}", e.getMessage());

@@ -49,9 +49,10 @@
             <version>${jjwt.version}</version>
             <scope>runtime</scope>
         </dependency>
+        <!-- JWT JSON through Gson, which the server already uses (Spring moved to Jackson 3, jjwt is on Jackson 2) -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-jackson</artifactId>
+            <artifactId>jjwt-gson</artifactId>
             <version>${jjwt.version}</version>
             <scope>runtime</scope>
         </dependency>
