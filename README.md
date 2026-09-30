@@ -2,9 +2,9 @@
 
 Authoritative multiplayer server for **Ascensore**, a traditional Italian trick-taking card game, built with
 **Java 17 / Spring Boot** and **WebSockets**. The Flutter client lives in
-[Ascensore_Card_Game](https://github.com/AndreaSacconi7/Ascensore_Card_Game).
+[Ascensore](https://github.com/AndreaSacconi7/Ascensore).
 
-**Live:** the game at [andreasacconi7.github.io/Ascensore_Card_Game](https://andreasacconi7.github.io/Ascensore_Card_Game/)
+**Live:** the game at [andreasacconi7.github.io/Ascensore](https://andreasacconi7.github.io/Ascensore/)
 plays on this server, deployed on Fly.io (`wss://ascensore-server.fly.dev/ws`).
 
 ## The game
